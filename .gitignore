@@ -2,3 +2,4 @@
 run.sh
 deploy.sh
 k8s_installer.run
+payload/
