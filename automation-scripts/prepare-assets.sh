@@ -2,17 +2,21 @@
 # Developed by Alex Umansky aka TheBlueDrara
 # Purpose: Download all .deb packages and container images needed by install.sh
 #          into a local payload/ directory ready for Ansible deployment.
+#
 # Prerequisites: Docker (running, current user has access), curl.
 #               No root required. Runs on any OS with Docker.
-# Usage: bash prepare-assets.sh [--k8s-version X.Y.Z] [--calico-version X.Y.Z]
-#                                [--output-dir PATH]
+#
+# Usage: bash automation-scripts/prepare-assets.sh [--output-dir PATH]
+#
+# Versions are pinned to the known-working set for this project.
+# Override via CLI flags only if you know what you are doing.
 set -o errexit
 set -o nounset
 set -o pipefail
 
-# ── Defaults ───────────────────────────────────────────────────────────────
+# ── Pinned versions ────────────────────────────────────────────────────────
 K8S_VERSION="1.30.14"
-CALICO_VERSION="3.28.0"
+CALICO_VERSION="3.27.2"
 OUTPUT_DIR="./payload"
 
 trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
@@ -26,12 +30,12 @@ trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 # Examples:
 #   registry.k8s.io/kube-apiserver:v1.30.14  →  kube-apiserver
 #   registry.k8s.io/coredns/coredns:v1.11.3  →  coredns
-#   docker.io/calico/node:v3.28.0            →  calico-node
+#   docker.io/calico/node:v3.27.2            →  calico-node
 function image_to_filename() {
     local image="$1"
     local name
 
-    name="${image##*/}"   # strip registry + path prefix  →  node:v3.28.0
+    name="${image##*/}"   # strip registry + path prefix  →  node:v3.27.2
     name="${name%%:*}"    # strip tag                     →  node
 
     if [[ "${image}" == *"/calico/"* ]]; then
@@ -121,10 +125,6 @@ function download_debs() {
     echo "    k8s repo  : pkgs.k8s.io/core:/stable:/v${k8s_minor}"
     echo "    containerd: download.docker.com/linux/ubuntu"
 
-    # The inner script runs inside the container. Variables from the host are
-    # injected via -e flags and are available as env vars inside the container.
-    # Writing via cat avoids shellcheck analyzing the inner script in the outer
-    # script's context, which would produce false SC2154 warnings.
     local inner_script
     inner_script="$(mktemp)"
     cat > "${inner_script}" << 'INNER'
@@ -192,8 +192,10 @@ INNER
 
 # Queries kubeadm inside a Docker container for the exact image refs required
 # by the target k8s version. Prints one fully-qualified image ref per line.
+# This is the authoritative source for etcd and CoreDNS version pins —
+# no hardcoding required.
 # Pre:  Docker available; K8S_VERSION set.
-# Post: image list written to stdout; etcd and CoreDNS refs are version-accurate.
+# Post: image list written to stdout.
 function get_k8s_image_list() {
     local k8s_minor
     k8s_minor="${K8S_VERSION%.*}"
@@ -231,8 +233,7 @@ INNER
 # payload/images/ as individual .tar files.
 # Uses --platform linux/amd64 on every pull to ensure the correct
 # architecture regardless of the build machine (e.g. Apple Silicon).
-# Pre:  Docker available; OUTPUT_DIR/images/ exists; K8S_VERSION and
-#       CALICO_VERSION set.
+# Pre:  Docker available; OUTPUT_DIR/images/ exists.
 # Post: one <name>.tar per image in payload/images/. Existing tars are skipped.
 function pull_and_save_images() {
     echo "==> Querying kubeadm for k8s image list..."
@@ -273,10 +274,10 @@ function pull_and_save_images() {
 # CALICO MANIFEST
 # ══════════════════════════════════════════════════════════════════════════
 
-# Downloads the official Calico manifest at the exact CALICO_VERSION.
-# The image refs in the manifest match the tars saved by pull_and_save_images
-# because both derive from the same version tag.
-# Pre:  curl available; OUTPUT_DIR/manifests/ exists; CALICO_VERSION set.
+# Downloads the official Calico manifest at the exact CALICO_VERSION from
+# the projectcalico GitHub release. Image refs in the manifest match the
+# tars saved by pull_and_save_images because both use the same version tag.
+# Pre:  curl available; OUTPUT_DIR/manifests/ exists.
 # Post: payload/manifests/calico.yaml exists at the correct version.
 function download_calico_manifest() {
     local dest="${OUTPUT_DIR}/manifests/calico.yaml"
