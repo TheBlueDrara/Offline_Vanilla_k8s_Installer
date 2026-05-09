@@ -55,14 +55,14 @@ function main(){
 "
 
     validate_prerequisites || exit 1
-    setup_output_dirs
+    setup_output_dirs || exit 1
     echo "Output directory: $(realpath "$OUTPUT_DIR")"
 
     export K8S_VERSION CALICO_VERSION OUTPUT_DIR
 
-    bash "$SCRIPT_DIR/lib/download-debs.sh"
-    bash "$SCRIPT_DIR/lib/pull-images.sh"
-    bash "$SCRIPT_DIR/lib/download-manifest.sh"
+    bash "$SCRIPT_DIR/lib/download-debs.sh"      || exit 1
+    bash "$SCRIPT_DIR/lib/pull-images.sh"         || exit 1
+    bash "$SCRIPT_DIR/lib/download-manifest.sh"   || exit 1
 
     local tier img_count tier_counts=""
     for tier in 1 2 3 4 5; do

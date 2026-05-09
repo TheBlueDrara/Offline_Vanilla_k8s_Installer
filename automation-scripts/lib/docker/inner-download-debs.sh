@@ -3,6 +3,8 @@
 # Developed by Alex Umansky aka TheBlueDrara
 # Purpose: Run inside ubuntu:24.04 container — adds apt repos and downloads
 #          all .deb packages for tiers 1-5 into /debs/tier-{1..5}/.
+# Date 13.07.2025
+# Version 1.0.0
 set -o errexit
 set -o nounset
 set -o pipefail
@@ -12,19 +14,8 @@ set -o pipefail
 NULL=/dev/null
 
 function main(){
-    case "${1:-}" in
-        --debug)
-            set -x
-            shift
-            ;;
-        -h|--help)
-            help
-            exit 0
-            ;;
-    esac
-
     setup_repos || exit 1
-    cd /debs/tier-1 && apt-get download perl-base && cd /
+    ( cd /debs/tier-1 && apt-get download perl-base )
     download_tier 1 conntrack socat ebtables iptables || exit 1
     download_tier 2 containerd.io                     || exit 1
     download_tier 3 kubernetes-cni                    || exit 1
@@ -35,18 +26,6 @@ function main(){
         "kubectl=$K8S_VERSION-*" \
         || exit 1
     echo "--- All tiers downloaded."
-}
-
-# Prints usage information
-function help(){
-    echo "Usage: bash inner-download-debs.sh
-
-  Runs inside ubuntu:24.04 container. Invoked by download-debs.sh.
-  Expects K8S_MINOR and K8S_VERSION in environment.
-
-Options:
-  --debug       enable set -x tracing
-  -h | --help   show this help"
 }
 
 # Configures apt repositories for k8s and Docker inside the container

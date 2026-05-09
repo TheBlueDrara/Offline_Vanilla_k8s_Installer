@@ -3,6 +3,8 @@
 # Developed by Alex Umansky aka TheBlueDrara
 # Purpose: Phase 3 — download the Calico manifest at CALICO_VERSION from
 #          GitHub into OUTPUT_DIR/manifests/calico.yaml.
+# Date 13.07.2025
+# Version 1.0.0
 set -o errexit
 set -o nounset
 set -o pipefail
@@ -54,7 +56,7 @@ function download_manifest(){
     local dest=$1
     local url="https://raw.githubusercontent.com/projectcalico/calico/v${CALICO_VERSION}/manifests/calico.yaml"
 
-    curl -fsSL "$url" -o "$dest"
+    curl -fsSL "$url" -o "${dest}.tmp" && mv "${dest}.tmp" "$dest"
 }
 
 main "$@"

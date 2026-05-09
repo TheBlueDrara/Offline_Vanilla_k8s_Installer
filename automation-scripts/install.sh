@@ -24,6 +24,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 PAYLOAD_DIR="${PAYLOAD_DIR:-$SCRIPT_DIR/payload}"
 CONFIG_DIR="${CONFIG_DIR:-$SCRIPT_DIR/configs}"
+# shellcheck source=/dev/null
 . /etc/os-release
 
 function main(){
@@ -152,7 +153,7 @@ function install_k8s(){
 
 # Attempts to restart an inactive kubelet on a previously joined worker
 function recover_worker(){
-    systemctl start kubelet
+    systemctl start kubelet || return 1
 
     local retries=10
     while [[ $retries -gt 0 ]]; do
@@ -189,17 +190,17 @@ function install_os_deps(){
         return 0
     fi
 
-    require_debs "$PAYLOAD_DIR/debs/tier-1"
-    dpkg_install_tier "$PAYLOAD_DIR/debs/tier-1"
+    require_debs "$PAYLOAD_DIR/debs/tier-1"     || return 1
+    dpkg_install_tier "$PAYLOAD_DIR/debs/tier-1" || return 1
 }
 
 # Installs containerd from payload/debs/tier-2, writes config, and verifies service
 function install_containerd(){
     if command -v containerd &>$NULL && systemctl is-active --quiet containerd; then
-        : # already installed; fall through to refresh config
+        :
     else
-        require_debs "$PAYLOAD_DIR/debs/tier-2"
-        dpkg_install_tier "$PAYLOAD_DIR/debs/tier-2"
+        require_debs "$PAYLOAD_DIR/debs/tier-2"     || return 1
+        dpkg_install_tier "$PAYLOAD_DIR/debs/tier-2" || return 1
     fi
 
     mkdir -p /etc/containerd
@@ -229,8 +230,8 @@ function install_cni(){
         return 0
     fi
 
-    require_debs "$PAYLOAD_DIR/debs/tier-3"
-    dpkg_install_tier "$PAYLOAD_DIR/debs/tier-3"
+    require_debs "$PAYLOAD_DIR/debs/tier-3"     || return 1
+    dpkg_install_tier "$PAYLOAD_DIR/debs/tier-3" || return 1
 }
 
 # Installs cri-tools (crictl) from payload/debs/tier-4
@@ -239,8 +240,8 @@ function install_cri_tools(){
         return 0
     fi
 
-    require_debs "$PAYLOAD_DIR/debs/tier-4"
-    dpkg_install_tier "$PAYLOAD_DIR/debs/tier-4"
+    require_debs "$PAYLOAD_DIR/debs/tier-4"     || return 1
+    dpkg_install_tier "$PAYLOAD_DIR/debs/tier-4" || return 1
 }
 
 # Installs kubelet, kubeadm, and kubectl from payload/debs/tier-5
@@ -257,8 +258,8 @@ Version changes are out of scope for this installer. Manual intervention require
         return 1
     fi
 
-    require_debs "$PAYLOAD_DIR/debs/tier-5"
-    dpkg_install_tier "$PAYLOAD_DIR/debs/tier-5"
+    require_debs "$PAYLOAD_DIR/debs/tier-5"     || return 1
+    dpkg_install_tier "$PAYLOAD_DIR/debs/tier-5" || return 1
 
     apt-mark hold kubelet kubeadm kubectl
     systemctl daemon-reload
@@ -364,6 +365,21 @@ function init_control_plane(){
     echo "JOIN_COMMAND=\"$join_cmd\"" > "$JOIN_COMMAND_PATH"
 }
 
+# Polls the API server /healthz endpoint until it responds or times out
+function wait_for_apiserver(){
+    local timeout=120
+    local start_time=$SECONDS
+
+    until kubectl --kubeconfig /etc/kubernetes/admin.conf get --raw /healthz &>$NULL; do
+        if [[ $(( SECONDS - start_time )) -ge $timeout ]]; then
+            echo "ERROR: API server did not become healthy within ${timeout}s." >&2
+            kubectl --kubeconfig /etc/kubernetes/admin.conf get --raw /healthz >&2 || true
+            return 1
+        fi
+        sleep 2
+    done
+}
+
 # Deploys Calico CNI from payload/manifests/calico.yaml
 function install_calico(){
     if [[ ! -e /usr/lib/cni ]]; then
@@ -419,21 +435,6 @@ function join_worker_node(){
     fi
 
     eval "$JOIN_COMMAND"
-}
-
-# Polls the API server /healthz endpoint until it responds or times out
-function wait_for_apiserver(){
-    local timeout=120
-    local start_time=$SECONDS
-
-    until kubectl --kubeconfig /etc/kubernetes/admin.conf get --raw /healthz &>$NULL; do
-        if [[ $(( SECONDS - start_time )) -ge $timeout ]]; then
-            echo "ERROR: API server did not become healthy within ${timeout}s." >&2
-            kubectl --kubeconfig /etc/kubernetes/admin.conf get --raw /healthz >&2 || true
-            return 1
-        fi
-        sleep 2
-    done
 }
 
 main "$@"

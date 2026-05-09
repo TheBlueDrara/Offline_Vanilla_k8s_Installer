@@ -3,6 +3,8 @@
 # Developed by Alex Umansky aka TheBlueDrara
 # Purpose: Phase 2 — pull all k8s control-plane and Calico images and save
 #          them as individual .tar files in OUTPUT_DIR/images/.
+# Date 13.07.2025
+# Version 1.0.0
 set -o errexit
 set -o nounset
 set -o pipefail
@@ -30,7 +32,9 @@ function main(){
     echo "==> Querying kubeadm for k8s image list..."
 
     local -a k8s_images
-    mapfile -t k8s_images < <(get_k8s_image_list)
+    get_k8s_image_list > /tmp/k8s_images_list.txt || { echo "ERROR: Failed to retrieve k8s image list." >&2; exit 1; }
+    mapfile -t k8s_images < /tmp/k8s_images_list.txt
+    rm -f /tmp/k8s_images_list.txt
 
     if [[ ${#k8s_images[@]} -eq 0 ]]; then
         echo "ERROR: get_k8s_image_list returned no images. Check Docker/network." >&2

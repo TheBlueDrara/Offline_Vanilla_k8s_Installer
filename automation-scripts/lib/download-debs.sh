@@ -3,6 +3,8 @@
 # Developed by Alex Umansky aka TheBlueDrara
 # Purpose: Phase 1 — download all .deb packages for tiers 1-5 into
 #          OUTPUT_DIR/debs/tier-{1..5}/ using a fresh ubuntu:24.04 container.
+# Date 13.07.2025
+# Version 1.0.0
 set -o errexit
 set -o nounset
 set -o pipefail
