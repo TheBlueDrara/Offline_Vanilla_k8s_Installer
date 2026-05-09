@@ -25,9 +25,10 @@ REAL_HOME=""
 
 NULL=/dev/null
 
-
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# shellcheck source=/dev/null
+. /etc/os-release
 PAYLOAD_DIR="${PAYLOAD_DIR:-$SCRIPT_DIR/payload}"
 CONFIG_DIR="${CONFIG_DIR:-$SCRIPT_DIR/configs}"
 
@@ -78,7 +79,7 @@ Options:
 # Determines the non-root user who invoked sudo
 function resolve_real_user(){
     if [[ -n "${SUDO_USER:-}" ]]; then
-        REAL_USER="${SUDO_USER}"
+        REAL_USER="$SUDO_USER"
     else
         REAL_USER="$(logname 2>$NULL || echo root)"
     fi
@@ -92,8 +93,6 @@ function validate_environment(){
         exit 1
     fi
 
-    # shellcheck source=/dev/null
-    . /etc/os-release
     if [[ "$ID" != "ubuntu" && "$ID" != "debian" ]] && \
        [[ "${ID_LIKE:-}" != *ubuntu* && "${ID_LIKE:-}" != *debian* ]]; then
         echo "ERROR: This installer targets Ubuntu 24.04. Detected OS: $ID" >&2
@@ -146,9 +145,9 @@ function check_node(){
             echo "Control plane is already running — re-run is a no-op."
             exit 0
         else
-            echo "ERROR: Control-plane manifests present but kubelet is inactive." >&2
-            echo "Manual investigation required." >&2
-            echo "Run: journalctl -u kubelet --no-pager -n 50" >&2
+            echo "ERROR: Control-plane manifests present but kubelet is inactive.
+Manual investigation required.
+Run: journalctl -u kubelet --no-pager -n 50" >&2
             exit 1
         fi
     else
@@ -199,8 +198,8 @@ function recover_worker(){
         sleep 2
     done
 
-    echo "ERROR: kubelet did not become active after restart." >&2
-    echo "Run 'journalctl -u kubelet --no-pager -n 50' for details." >&2
+    echo "ERROR: kubelet did not become active after restart.
+Run 'journalctl -u kubelet --no-pager -n 50' for details." >&2
     exit 1
 }
 
@@ -299,8 +298,8 @@ function install_kube_binaries(){
             echo "kube binaries already at v$K8S_VERSION."
             return 0
         fi
-        echo "ERROR: Found kube binaries at v$installed_version, expected v$K8S_VERSION." >&2
-        echo "Version changes are out of scope for this installer. Manual intervention required." >&2
+        echo "ERROR: Found kube binaries at v$installed_version, expected v$K8S_VERSION.
+Version changes are out of scope for this installer. Manual intervention required." >&2
         exit 1
     fi
 
@@ -461,7 +460,6 @@ function join_worker_node(){
     fi
 
     echo "Joining cluster..."
-    # eval is required: JOIN_COMMAND is a multi-word kubeadm command string
     eval "$JOIN_COMMAND"
 }
 

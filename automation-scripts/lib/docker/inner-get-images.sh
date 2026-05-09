@@ -8,7 +8,7 @@ set -o nounset
 set -o pipefail
 #################### End Safe Header ###########################
 
-
+NULL=/dev/null
 
 function main(){
     case "${1:-}" in
@@ -23,7 +23,7 @@ function main(){
     esac
 
     setup_repos
-    apt-get install -y --no-install-recommends "kubeadm=${K8S_VERSION}-*" >/dev/null 2>&1
+    apt-get install -y --no-install-recommends "kubeadm=${K8S_VERSION}-*" >$NULL 2>&1
     kubeadm config images list --kubernetes-version="v$K8S_VERSION"
 }
 
@@ -43,18 +43,18 @@ Options:
 function setup_repos(){
     export DEBIAN_FRONTEND=noninteractive
 
-    apt-get update -qq >/dev/null 2>&1
-    apt-get install -y --no-install-recommends ca-certificates curl gpg >/dev/null 2>&1
+    apt-get update -qq >$NULL 2>&1
+    apt-get install -y --no-install-recommends ca-certificates curl gpg >$NULL 2>&1
 
     mkdir -p /etc/apt/keyrings
 
     curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${K8S_MINOR}/deb/Release.key" \
-        | gpg --dearmor -o /etc/apt/keyrings/k8s.gpg 2>/dev/null
+        | gpg --dearmor -o /etc/apt/keyrings/k8s.gpg 2>$NULL
 
     printf 'deb [signed-by=/etc/apt/keyrings/k8s.gpg] https://pkgs.k8s.io/core:/stable:/v%s/deb/ /\n' \
         "$K8S_MINOR" > /etc/apt/sources.list.d/k8s.list
 
-    apt-get update -qq >/dev/null 2>&1
+    apt-get update -qq >$NULL 2>&1
 }
 
 main "$@"

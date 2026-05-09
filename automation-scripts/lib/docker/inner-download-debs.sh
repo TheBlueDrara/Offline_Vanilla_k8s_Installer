@@ -8,7 +8,8 @@ set -o nounset
 set -o pipefail
 #################### End Safe Header ###########################
 
-
+# shellcheck disable=SC2034
+NULL=/dev/null
 
 function main(){
     case "${1:-}" in

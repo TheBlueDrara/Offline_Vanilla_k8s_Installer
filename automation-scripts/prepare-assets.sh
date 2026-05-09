@@ -61,6 +61,7 @@ function main(){
 
     validate_prerequisites
     setup_output_dirs
+    echo "Output directory: $(realpath "$OUTPUT_DIR")"
 
     export K8S_VERSION CALICO_VERSION OUTPUT_DIR
 
@@ -130,7 +131,6 @@ function setup_output_dirs(){
     for dir in "${dirs[@]}"; do
         mkdir -p "$dir"
     done
-    echo "Output directory: $(realpath "$OUTPUT_DIR")"
 }
 
 main "$@"
