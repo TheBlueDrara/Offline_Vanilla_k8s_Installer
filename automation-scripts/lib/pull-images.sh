@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
+###################################### START SAFE HEADER #########################################
 # Developed by Alex Umansky aka TheBlueDrara
 # Purpose: Phase 2 — pull all k8s control-plane and Calico images and save
 #          them as individual .tar files in OUTPUT_DIR/images/.
-# Reads:   K8S_VERSION, CALICO_VERSION, OUTPUT_DIR (from environment)
 set -o errexit
 set -o nounset
 set -o pipefail
+#################################### END SAFE HEADER #############################################
 
 trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 

@@ -1,43 +1,31 @@
 #!/usr/bin/env bash
+###################################### START SAFE HEADER #########################################
 # Developed by Alex Umansky aka TheBlueDrara
 # Purpose: Install vanilla Kubernetes offline on Ubuntu 24.04. Detects node
 #          role at runtime: control_plane initialises the cluster and writes
 #          a join command; worker consumes that command and joins.
-# Version: 3.0.0
 set -o errexit
 set -o nounset
 set -o pipefail
+#################################### END SAFE HEADER #############################################
 
-# ── Version constants ──────────────────────────────────────────────────────
-# Change these when targeting a different k8s release; they are the only
-# place in the script where version information lives.
 K8S_VERSION="1.30.14"
 POD_NETWORK_CIDR="192.168.0.0/16"
 CRI_SOCKET="unix:///run/containerd/containerd.sock"
 
-# ── Well-known paths ───────────────────────────────────────────────────────
 MANIFESTS_PATH="/etc/kubernetes/manifests"
 JOIN_COMMAND_PATH="/tmp/join_command.txt"
 
-# ── Overridable asset paths ────────────────────────────────────────────────
-# Default: payload/ and configs/ are siblings of this script on disk.
-# Override via environment variable when the layout differs (e.g. Ansible).
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PAYLOAD_DIR="${PAYLOAD_DIR:-${SCRIPT_DIR}/payload}"
-CONFIG_DIR="${CONFIG_DIR:-${SCRIPT_DIR}/configs}"
-
-# ── Runtime state (set by main → resolve_real_user) ───────────────────────
 ROLE=""
 CONTROL_PLANE_IP=""
 REAL_USER=""
 REAL_HOME=""
 
-# ── Error tracing ──────────────────────────────────────────────────────────
 trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
-# ══════════════════════════════════════════════════════════════════════════
-# ENTRY POINT
-# ══════════════════════════════════════════════════════════════════════════
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PAYLOAD_DIR="${PAYLOAD_DIR:-${SCRIPT_DIR}/payload}"
+CONFIG_DIR="${CONFIG_DIR:-${SCRIPT_DIR}/configs}"
 
 function main() {
     while [[ $# -gt 0 ]]; do
@@ -67,10 +55,6 @@ function main() {
     validate_environment
     check_node
 }
-
-# ══════════════════════════════════════════════════════════════════════════
-# SETUP AND VALIDATION
-# ══════════════════════════════════════════════════════════════════════════
 
 # Determines the non-root user who invoked sudo.
 # Pre:  script is running as root (EUID == 0).
@@ -127,10 +111,6 @@ function validate_environment() {
         exit 1
     fi
 }
-
-# ══════════════════════════════════════════════════════════════════════════
-# ORCHESTRATION
-# ══════════════════════════════════════════════════════════════════════════
 
 # Determines the current node state and routes to the appropriate action.
 # This is the top-level decision function for all fresh-install and re-run paths.
@@ -226,10 +206,6 @@ function recover_worker() {
     echo "Run 'journalctl -u kubelet --no-pager -n 50' for details." >&2
     exit 1
 }
-
-# ══════════════════════════════════════════════════════════════════════════
-# PREREQUISITES  (every node, every role)
-# ══════════════════════════════════════════════════════════════════════════
 
 # Disables swap for the current boot and comments out swap entries in /etc/fstab.
 # Pre:  running as root.
@@ -432,10 +408,6 @@ function import_images() {
     done < <(find "${image_dir}" -maxdepth 1 -name '*.tar' | sort)
 }
 
-# ══════════════════════════════════════════════════════════════════════════
-# CONTROL PLANE
-# ══════════════════════════════════════════════════════════════════════════
-
 # Initialises the Kubernetes control plane via kubeadm. Writes kubeconfigs
 # for both the invoking (non-root) user and root. Writes the worker join
 # command to JOIN_COMMAND_PATH.
@@ -527,10 +499,6 @@ function install_optional_tools() {
     fi
 }
 
-# ══════════════════════════════════════════════════════════════════════════
-# WORKER
-# ══════════════════════════════════════════════════════════════════════════
-
 # Sources the join command from JOIN_COMMAND_PATH and executes it.
 # The file is written by init_control_plane() on the control plane and must
 # be present on this worker before this function runs (Ansible's worker play
@@ -563,10 +531,6 @@ function join_worker_node() {
     # with flags that must be word-split correctly at execution time.
     eval "${JOIN_COMMAND}"
 }
-
-# ══════════════════════════════════════════════════════════════════════════
-# HELPERS
-# ══════════════════════════════════════════════════════════════════════════
 
 # Asserts that a tier directory exists and contains at least one .deb file.
 # Pre:  $1 is the absolute path to a tier directory.

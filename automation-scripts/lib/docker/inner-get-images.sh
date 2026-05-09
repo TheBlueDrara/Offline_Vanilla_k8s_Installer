@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
+###################################### START SAFE HEADER #########################################
 # Developed by Alex Umansky aka TheBlueDrara
 # Purpose: Run inside ubuntu:24.04 container — installs kubeadm and prints
 #          the full image list for the target k8s version to stdout.
-# Invoked by: lib/pull-images.sh via docker run bind-mount.
 set -o errexit
 set -o nounset
 set -o pipefail
+#################################### END SAFE HEADER #############################################
 
 trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 

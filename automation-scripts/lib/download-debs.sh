@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
+###################################### START SAFE HEADER #########################################
 # Developed by Alex Umansky aka TheBlueDrara
 # Purpose: Phase 1 — download all .deb packages for tiers 1-5 into
 #          OUTPUT_DIR/debs/tier-{1..5}/ using a fresh ubuntu:24.04 container.
-# Reads:   K8S_VERSION, OUTPUT_DIR (from environment)
 set -o errexit
 set -o nounset
 set -o pipefail
+#################################### END SAFE HEADER #############################################
 
 trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 

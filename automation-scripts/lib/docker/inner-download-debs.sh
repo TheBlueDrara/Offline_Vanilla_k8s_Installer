@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
+###################################### START SAFE HEADER #########################################
 # Developed by Alex Umansky aka TheBlueDrara
 # Purpose: Run inside ubuntu:24.04 container — adds apt repos and downloads
 #          all .deb packages for tiers 1-5 into /debs/tier-{1..5}/.
-# Invoked by: lib/download-debs.sh via docker run bind-mount.
 set -o errexit
 set -o nounset
 set -o pipefail
+#################################### END SAFE HEADER #############################################
 
 trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 

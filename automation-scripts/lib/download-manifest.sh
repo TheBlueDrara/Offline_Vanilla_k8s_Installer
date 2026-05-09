@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
+###################################### START SAFE HEADER #########################################
 # Developed by Alex Umansky aka TheBlueDrara
 # Purpose: Phase 3 — download the Calico manifest at CALICO_VERSION from
 #          GitHub into OUTPUT_DIR/manifests/calico.yaml.
-# Reads:   CALICO_VERSION, OUTPUT_DIR (from environment)
 set -o errexit
 set -o nounset
 set -o pipefail
+#################################### END SAFE HEADER #############################################
 
 trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 

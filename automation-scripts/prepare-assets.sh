@@ -3,14 +3,6 @@
 # Developed by Alex Umansky aka TheBlueDrara
 # Purpose: Download all .deb packages and container images needed by install.sh
 #          into a local payload/ directory ready for Ansible deployment.
-#
-# Prerequisites: Docker (running, current user has access), curl.
-#               No root required. Runs on any OS with Docker.
-#
-# Usage: bash automation-scripts/prepare-assets.sh [--output-dir PATH]
-#
-# Versions are pinned to the known-working set for this project.
-# Override via CLI flags only if you know what you are doing.
 set -o errexit
 set -o nounset
 set -o pipefail
