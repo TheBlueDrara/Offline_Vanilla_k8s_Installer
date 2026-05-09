@@ -11,6 +11,13 @@ set -o pipefail
 trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
 function main(){
+    case "${1:-}" in
+        -h|--help)
+            help
+            exit 0
+            ;;
+    esac
+
     setup_repos
     cd /debs/tier-1 && apt-get download perl-base && cd /
     download_tier 1 conntrack socat ebtables iptables
@@ -22,6 +29,17 @@ function main(){
         "kubeadm=${K8S_VERSION}-*" \
         "kubectl=${K8S_VERSION}-*"
     echo "--- All tiers downloaded."
+}
+
+# Prints usage information
+function help(){
+    echo "Usage: bash inner-download-debs.sh
+
+  Runs inside ubuntu:24.04 container. Invoked by download-debs.sh.
+  Expects K8S_MINOR and K8S_VERSION in environment.
+
+Options:
+  -h | --help   show this help"
 }
 
 # Configures apt repositories for k8s and Docker inside the container

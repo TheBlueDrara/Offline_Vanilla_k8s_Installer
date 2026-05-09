@@ -16,6 +16,13 @@ trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 function main(){
+    case "${1:-}" in
+        -h|--help)
+            help
+            exit 0
+            ;;
+    esac
+
     echo "==> Querying kubeadm for k8s image list..."
 
     local -a k8s_images
@@ -56,6 +63,17 @@ function main(){
     done
 
     echo "==> Images saved."
+}
+
+# Prints usage information
+function help(){
+    echo "Usage: bash lib/pull-images.sh
+
+  Reads K8S_VERSION, CALICO_VERSION, and OUTPUT_DIR from environment.
+  Called by prepare-assets.sh — not usually run directly.
+
+Options:
+  -h | --help   show this help"
 }
 
 # Returns the k8s image list by running kubeadm inside a container

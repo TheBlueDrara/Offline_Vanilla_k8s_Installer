@@ -14,6 +14,13 @@ NULL=/dev/null
 trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
 function main(){
+    case "${1:-}" in
+        -h|--help)
+            help
+            exit 0
+            ;;
+    esac
+
     local dest="$OUTPUT_DIR/manifests/calico.yaml"
 
     if [[ -f "$dest" ]]; then
@@ -24,6 +31,17 @@ function main(){
     echo "==> Downloading Calico v$CALICO_VERSION manifest..."
     download_manifest "$dest"
     echo "    Saved: $dest"
+}
+
+# Prints usage information
+function help(){
+    echo "Usage: bash lib/download-manifest.sh
+
+  Reads CALICO_VERSION and OUTPUT_DIR from environment.
+  Called by prepare-assets.sh — not usually run directly.
+
+Options:
+  -h | --help   show this help"
 }
 
 # Downloads the Calico manifest from GitHub

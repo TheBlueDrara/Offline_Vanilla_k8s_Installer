@@ -48,6 +48,10 @@ function main(){
                 set -x
                 shift
                 ;;
+            -h|--help)
+                help
+                exit 0
+                ;;
             *)
                 echo "WARNING: ignoring unrecognized argument: $1" >&2
                 shift
@@ -58,6 +62,17 @@ function main(){
     resolve_real_user
     validate_environment
     check_node
+}
+
+# Prints usage information
+function help(){
+    echo "Usage: sudo bash install.sh [OPTIONS]
+
+Options:
+  -r | --role     control_plane | worker   (required)
+  -m | --master   <IP>                     (required for control_plane)
+  --debug                                  enable set -x tracing
+  -h | --help                              show this help"
 }
 
 # Determines the non-root user who invoked sudo

@@ -38,6 +38,10 @@ function main(){
                 OUTPUT_DIR="$2"
                 shift 2
                 ;;
+            -h|--help)
+                help
+                exit 0
+                ;;
             *)
                 echo "WARNING: ignoring unrecognized argument: $1" >&2
                 shift
@@ -75,6 +79,17 @@ function main(){
 ${tier_counts}      images : $img_count .tar(s)
 
     Next: ansible-playbook cd/playbooks/main.yaml"
+}
+
+# Prints usage information
+function help(){
+    echo "Usage: bash prepare-assets.sh [OPTIONS]
+
+Options:
+  --k8s-version    <X.Y.Z>   k8s version      (default: 1.30.14)
+  --calico-version <X.Y.Z>   Calico version   (default: 3.27.2)
+  --output-dir     <PATH>    output directory  (default: ./payload)
+  -h | --help                show this help"
 }
 
 # Validates that docker and curl are available

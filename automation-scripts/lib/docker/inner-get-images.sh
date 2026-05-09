@@ -11,9 +11,27 @@ set -o pipefail
 trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
 function main(){
+    case "${1:-}" in
+        -h|--help)
+            help
+            exit 0
+            ;;
+    esac
+
     setup_repos
     apt-get install -y --no-install-recommends "kubeadm=${K8S_VERSION}-*" >/dev/null 2>&1
     kubeadm config images list --kubernetes-version="v$K8S_VERSION"
+}
+
+# Prints usage information
+function help(){
+    echo "Usage: bash inner-get-images.sh
+
+  Runs inside ubuntu:24.04 container. Invoked by pull-images.sh.
+  Expects K8S_MINOR and K8S_VERSION in environment.
+
+Options:
+  -h | --help   show this help"
 }
 
 # Configures the k8s apt repository inside the container

@@ -15,6 +15,13 @@ trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 function main(){
+    case "${1:-}" in
+        -h|--help)
+            help
+            exit 0
+            ;;
+    esac
+
     local tier5_count
     tier5_count=$(find "$OUTPUT_DIR/debs/tier-5" -maxdepth 1 -name '*.deb' 2>$NULL | wc -l)
     if [[ $tier5_count -gt 0 ]]; then
@@ -27,6 +34,17 @@ function main(){
     containerd: download.docker.com/linux/ubuntu"
     download_debs
     echo "==> .deb download complete."
+}
+
+# Prints usage information
+function help(){
+    echo "Usage: bash lib/download-debs.sh
+
+  Reads K8S_VERSION and OUTPUT_DIR from environment.
+  Called by prepare-assets.sh — not usually run directly.
+
+Options:
+  -h | --help   show this help"
 }
 
 # Downloads all .deb tiers using a ubuntu:24.04 container
