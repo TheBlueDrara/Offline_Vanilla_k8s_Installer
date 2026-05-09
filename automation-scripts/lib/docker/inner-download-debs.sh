@@ -30,9 +30,9 @@ function main(){
     download_tier 3 kubernetes-cni
     download_tier 4 cri-tools
     download_tier 5 \
-        "kubelet=${K8S_VERSION}-*" \
-        "kubeadm=${K8S_VERSION}-*" \
-        "kubectl=${K8S_VERSION}-*"
+        "kubelet=$K8S_VERSION-*" \
+        "kubeadm=$K8S_VERSION-*" \
+        "kubectl=$K8S_VERSION-*"
     echo "--- All tiers downloaded."
 }
 
