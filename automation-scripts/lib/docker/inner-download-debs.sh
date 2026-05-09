@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Developed by Alex Umansky aka TheBlueDrara
+# Purpose: Run inside ubuntu:24.04 container — adds apt repos and downloads
+#          all .deb packages for tiers 1-5 into /debs/tier-{1..5}/.
+# Invoked by: lib/download-debs.sh via docker run bind-mount.
+set -o errexit
+set -o nounset
+set -o pipefail
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
+apt-get install -y --no-install-recommends ca-certificates curl gpg
+apt-get clean
+
+mkdir -p /etc/apt/keyrings
+
+curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${K8S_MINOR}/deb/Release.key" \
+    | gpg --dearmor -o /etc/apt/keyrings/k8s.gpg
+
+printf 'deb [signed-by=/etc/apt/keyrings/k8s.gpg] https://pkgs.k8s.io/core:/stable:/v%s/deb/ /\n' \
+    "${K8S_MINOR}" > /etc/apt/sources.list.d/k8s.list
+
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+    | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu noble stable" \
+    > /etc/apt/sources.list.d/docker.list
+
+apt-get update -qq
+
+download_tier() {
+    local tier="$1"
+    shift
+    echo "--- tier-${tier}: $*"
+    apt-get install -y --download-only --no-install-recommends "$@"
+    find /var/cache/apt/archives/ -maxdepth 1 -name '*.deb' \
+        -exec mv {} "/debs/tier-${tier}/" \;
+}
+
+cd /debs/tier-1 && apt-get download perl-base && cd /
+
+download_tier 1 conntrack socat ebtables iptables
+download_tier 2 containerd.io
+download_tier 3 kubernetes-cni
+download_tier 4 cri-tools
+download_tier 5 \
+    "kubelet=${K8S_VERSION}-*" \
+    "kubeadm=${K8S_VERSION}-*" \
+    "kubectl=${K8S_VERSION}-*"
+
+echo "--- All tiers downloaded."
