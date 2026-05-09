@@ -386,19 +386,18 @@ function init_control_plane() {
 # Post: API server confirmed healthy; or exits 1 after a 120 s timeout.
 function wait_for_apiserver() {
     local timeout=120
-    local elapsed=0
+    local start_time=${SECONDS}
 
     echo "Waiting for API server to become healthy..."
     until kubectl --kubeconfig /etc/kubernetes/admin.conf get --raw /healthz &>/dev/null; do
-        if [[ ${elapsed} -ge ${timeout} ]]; then
+        if [[ $(( SECONDS - start_time )) -ge ${timeout} ]]; then
             echo "ERROR: API server did not become healthy within ${timeout}s." >&2
             kubectl --kubeconfig /etc/kubernetes/admin.conf get --raw /healthz >&2 || true
             exit 1
         fi
         sleep 2
-        elapsed=$(( elapsed + 2 ))
     done
-    echo "API server is healthy (${elapsed}s elapsed)."
+    echo "API server is healthy ($(( SECONDS - start_time ))s elapsed)."
 }
 
 # Deploys Calico CNI from payload/manifests/calico.yaml and creates the
@@ -479,7 +478,6 @@ function join_worker_node() {
     echo "Joining cluster..."
     # eval is required: JOIN_COMMAND is a multi-word kubeadm command string
     # with flags that must be word-split correctly at execution time.
-    # shellcheck disable=SC2209
     eval "${JOIN_COMMAND}"
 }
 

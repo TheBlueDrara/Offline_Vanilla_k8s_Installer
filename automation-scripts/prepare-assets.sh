@@ -127,6 +127,7 @@ function download_debs() {
 
     local inner_script
     inner_script="$(mktemp)"
+    trap 'rm -f "${inner_script}"' RETURN ERR
     cat > "${inner_script}" << 'INNER'
 #!/bin/bash
 set -o errexit
@@ -182,7 +183,6 @@ INNER
         -v "${inner_script}:/tmp/download_debs.sh:ro" \
         ubuntu:24.04 bash /tmp/download_debs.sh
 
-    rm -f "${inner_script}"
     echo "    .deb download complete."
 }
 
@@ -202,6 +202,7 @@ function get_k8s_image_list() {
 
     local inner_script
     inner_script="$(mktemp)"
+    trap 'rm -f "${inner_script}"' RETURN ERR
     cat > "${inner_script}" << 'INNER'
 #!/bin/bash
 set -o errexit
@@ -227,8 +228,6 @@ INNER
         -e "K8S_VERSION=${K8S_VERSION}" \
         -v "${inner_script}:/tmp/get_images.sh:ro" \
         ubuntu:24.04 bash /tmp/get_images.sh
-
-    rm -f "${inner_script}"
 }
 
 # Pulls and saves all container images (k8s control-plane + Calico) to
@@ -241,6 +240,10 @@ function pull_and_save_images() {
     echo "==> Querying kubeadm for k8s image list..."
     local -a k8s_images
     mapfile -t k8s_images < <(get_k8s_image_list)
+    if [[ ${#k8s_images[@]} -eq 0 ]]; then
+        echo "ERROR: get_k8s_image_list returned no images. Check Docker/network." >&2
+        exit 1
+    fi
     echo "    ${#k8s_images[@]} k8s images listed."
 
     local -a calico_images=(
