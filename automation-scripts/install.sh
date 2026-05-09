@@ -56,7 +56,13 @@ function main(){
 
     echo "install.sh — role: $ROLE"
     resolve_real_user
-    validate_environment || exit 1
+    is_root          || { echo "ERROR: Run this script as root (e.g. sudo bash install.sh ...)." >&2; exit 1; }
+    is_supported_os  || { echo "ERROR: This installer targets Ubuntu 24.04. Detected OS: $ID" >&2; exit 1; }
+    no_docker        || { echo "ERROR: Docker is installed. Remove it before running this installer." >&2; exit 1; }
+    is_valid_role    || { echo "ERROR: --role must be 'control_plane' or 'worker'. Got: '${ROLE:-<unset>}'" >&2; exit 1; }
+    is_master_set    || { echo "ERROR: --master <IP> is required when --role is control_plane." >&2; exit 1; }
+    payload_exists   || { echo "ERROR: Payload directory not found: $PAYLOAD_DIR" >&2; exit 1; }
+    config_exists    || { echo "ERROR: Config directory not found: $CONFIG_DIR" >&2; exit 1; }
     check_node || exit 1
 }
 
@@ -81,44 +87,13 @@ function resolve_real_user(){
     REAL_HOME="$(getent passwd "$REAL_USER" | cut -d: -f6)"
 }
 
-# Checks all preconditions before any installation work begins
-function validate_environment(){
-    if [[ $EUID -ne 0 ]]; then
-        echo "ERROR: Run this script as root (e.g. sudo bash install.sh ...)." >&2
-        return 1
-    fi
-
-    if [[ "$ID" != "ubuntu" && "$ID" != "debian" ]] && \
-       [[ "${ID_LIKE:-}" != *ubuntu* && "${ID_LIKE:-}" != *debian* ]]; then
-        echo "ERROR: This installer targets Ubuntu 24.04. Detected OS: $ID" >&2
-        return 1
-    fi
-
-    if command -v docker &>$NULL; then
-        echo "ERROR: Docker is installed. Remove it before running this installer." >&2
-        return 1
-    fi
-
-    if [[ "$ROLE" != "control_plane" && "$ROLE" != "worker" ]]; then
-        echo "ERROR: --role must be 'control_plane' or 'worker'. Got: '${ROLE:-<unset>}'" >&2
-        return 1
-    fi
-
-    if [[ "$ROLE" == "control_plane" && -z "$CONTROL_PLANE_IP" ]]; then
-        echo "ERROR: --master <IP> is required when --role is control_plane." >&2
-        return 1
-    fi
-
-    if [[ ! -d "$PAYLOAD_DIR" ]]; then
-        echo "ERROR: Payload directory not found: $PAYLOAD_DIR" >&2
-        return 1
-    fi
-
-    if [[ ! -d "$CONFIG_DIR" ]]; then
-        echo "ERROR: Config directory not found: $CONFIG_DIR" >&2
-        return 1
-    fi
-}
+function is_root(){         [[ $EUID -eq 0 ]]; }
+function is_supported_os(){ [[ "$ID" == "ubuntu" || "$ID" == "debian" ]] || [[ "${ID_LIKE:-}" == *ubuntu* || "${ID_LIKE:-}" == *debian* ]]; }
+function no_docker(){       ! command -v docker &>$NULL; }
+function is_valid_role(){   [[ "$ROLE" == "control_plane" || "$ROLE" == "worker" ]]; }
+function is_master_set(){   [[ "$ROLE" != "control_plane" || -n "$CONTROL_PLANE_IP" ]]; }
+function payload_exists(){  [[ -d "$PAYLOAD_DIR" ]]; }
+function config_exists(){   [[ -d "$CONFIG_DIR" ]]; }
 
 # Determines the current node state and routes to the appropriate action
 function check_node(){
