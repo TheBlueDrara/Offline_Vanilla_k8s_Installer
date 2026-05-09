@@ -39,4 +39,5 @@ download_debs() {
     echo "==> .deb download complete."
 }
 
-download_debs
+main() { download_debs; }
+main "$@"

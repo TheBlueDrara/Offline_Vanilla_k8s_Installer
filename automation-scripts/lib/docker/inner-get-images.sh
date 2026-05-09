@@ -7,20 +7,29 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-export DEBIAN_FRONTEND=noninteractive
+trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
-apt-get update -qq >/dev/null 2>&1
-apt-get install -y --no-install-recommends ca-certificates curl gpg >/dev/null 2>&1
+setup_repos() {
+    export DEBIAN_FRONTEND=noninteractive
 
-mkdir -p /etc/apt/keyrings
+    apt-get update -qq >/dev/null 2>&1
+    apt-get install -y --no-install-recommends ca-certificates curl gpg >/dev/null 2>&1
 
-curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${K8S_MINOR}/deb/Release.key" \
-    | gpg --dearmor -o /etc/apt/keyrings/k8s.gpg 2>/dev/null
+    mkdir -p /etc/apt/keyrings
 
-printf 'deb [signed-by=/etc/apt/keyrings/k8s.gpg] https://pkgs.k8s.io/core:/stable:/v%s/deb/ /\n' \
-    "${K8S_MINOR}" > /etc/apt/sources.list.d/k8s.list
+    curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${K8S_MINOR}/deb/Release.key" \
+        | gpg --dearmor -o /etc/apt/keyrings/k8s.gpg 2>/dev/null
 
-apt-get update -qq >/dev/null 2>&1
-apt-get install -y --no-install-recommends "kubeadm=${K8S_VERSION}-*" >/dev/null 2>&1
+    printf 'deb [signed-by=/etc/apt/keyrings/k8s.gpg] https://pkgs.k8s.io/core:/stable:/v%s/deb/ /\n' \
+        "${K8S_MINOR}" > /etc/apt/sources.list.d/k8s.list
 
-kubeadm config images list --kubernetes-version="v${K8S_VERSION}"
+    apt-get update -qq >/dev/null 2>&1
+}
+
+main() {
+    setup_repos
+    apt-get install -y --no-install-recommends "kubeadm=${K8S_VERSION}-*" >/dev/null 2>&1
+    kubeadm config images list --kubernetes-version="v${K8S_VERSION}"
+}
+
+main "$@"

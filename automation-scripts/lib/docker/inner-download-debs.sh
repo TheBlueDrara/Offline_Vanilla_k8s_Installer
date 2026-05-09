@@ -7,26 +7,30 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y --no-install-recommends ca-certificates curl gpg
-apt-get clean
+trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
-mkdir -p /etc/apt/keyrings
+setup_repos() {
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq
+    apt-get install -y --no-install-recommends ca-certificates curl gpg
+    apt-get clean
 
-curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${K8S_MINOR}/deb/Release.key" \
-    | gpg --dearmor -o /etc/apt/keyrings/k8s.gpg
+    mkdir -p /etc/apt/keyrings
 
-printf 'deb [signed-by=/etc/apt/keyrings/k8s.gpg] https://pkgs.k8s.io/core:/stable:/v%s/deb/ /\n' \
-    "${K8S_MINOR}" > /etc/apt/sources.list.d/k8s.list
+    curl -fsSL "https://pkgs.k8s.io/core:/stable:/v${K8S_MINOR}/deb/Release.key" \
+        | gpg --dearmor -o /etc/apt/keyrings/k8s.gpg
 
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
-    | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    printf 'deb [signed-by=/etc/apt/keyrings/k8s.gpg] https://pkgs.k8s.io/core:/stable:/v%s/deb/ /\n' \
+        "${K8S_MINOR}" > /etc/apt/sources.list.d/k8s.list
 
-echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu noble stable" \
-    > /etc/apt/sources.list.d/docker.list
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+        | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 
-apt-get update -qq
+    echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu noble stable" \
+        > /etc/apt/sources.list.d/docker.list
+
+    apt-get update -qq
+}
 
 download_tier() {
     local tier="$1"
@@ -37,15 +41,18 @@ download_tier() {
         -exec mv {} "/debs/tier-${tier}/" \;
 }
 
-cd /debs/tier-1 && apt-get download perl-base && cd /
+main() {
+    setup_repos
+    cd /debs/tier-1 && apt-get download perl-base && cd /
+    download_tier 1 conntrack socat ebtables iptables
+    download_tier 2 containerd.io
+    download_tier 3 kubernetes-cni
+    download_tier 4 cri-tools
+    download_tier 5 \
+        "kubelet=${K8S_VERSION}-*" \
+        "kubeadm=${K8S_VERSION}-*" \
+        "kubectl=${K8S_VERSION}-*"
+    echo "--- All tiers downloaded."
+}
 
-download_tier 1 conntrack socat ebtables iptables
-download_tier 2 containerd.io
-download_tier 3 kubernetes-cni
-download_tier 4 cri-tools
-download_tier 5 \
-    "kubelet=${K8S_VERSION}-*" \
-    "kubeadm=${K8S_VERSION}-*" \
-    "kubectl=${K8S_VERSION}-*"
-
-echo "--- All tiers downloaded."
+main "$@"

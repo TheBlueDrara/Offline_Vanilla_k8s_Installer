@@ -24,4 +24,5 @@ download_manifest() {
     echo "    Saved: ${dest}"
 }
 
-download_manifest
+main() { download_manifest; }
+main "$@"

@@ -79,4 +79,5 @@ pull_and_save_images() {
     echo "==> Images saved."
 }
 
-pull_and_save_images
+main() { pull_and_save_images; }
+main "$@"
