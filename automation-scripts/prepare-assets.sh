@@ -164,6 +164,12 @@ download_tier() {
         -exec mv {} "/debs/tier-${tier}/" \;
 }
 
+# apt-get download fetches a package regardless of installed state.
+# We use it for perl-base because it is a transitive dep of ebtables/perl
+# that is already at a newer version in this Docker image than in the
+# target Vagrant box — apt-get install --download-only would skip it.
+cd /debs/tier-1 && apt-get download perl-base && cd /
+
 download_tier 1 conntrack socat ebtables iptables
 download_tier 2 containerd.io
 download_tier 3 kubernetes-cni
