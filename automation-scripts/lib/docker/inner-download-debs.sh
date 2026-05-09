@@ -23,16 +23,17 @@ function main(){
             ;;
     esac
 
-    setup_repos
+    setup_repos || exit 1
     cd /debs/tier-1 && apt-get download perl-base && cd /
-    download_tier 1 conntrack socat ebtables iptables
-    download_tier 2 containerd.io
-    download_tier 3 kubernetes-cni
-    download_tier 4 cri-tools
+    download_tier 1 conntrack socat ebtables iptables || exit 1
+    download_tier 2 containerd.io                     || exit 1
+    download_tier 3 kubernetes-cni                    || exit 1
+    download_tier 4 cri-tools                         || exit 1
     download_tier 5 \
         "kubelet=$K8S_VERSION-*" \
         "kubeadm=$K8S_VERSION-*" \
-        "kubectl=$K8S_VERSION-*"
+        "kubectl=$K8S_VERSION-*" \
+        || exit 1
     echo "--- All tiers downloaded."
 }
 

@@ -10,27 +10,21 @@ set -o errexit
 set -o nounset
 set -o pipefail
 #################### End Safe Header ###########################
-
 K8S_VERSION="1.30.14"
 POD_NETWORK_CIDR="192.168.0.0/16"
 CRI_SOCKET="unix:///run/containerd/containerd.sock"
-
 MANIFESTS_PATH="/etc/kubernetes/manifests"
 JOIN_COMMAND_PATH="/tmp/join_command.txt"
-
 ROLE=""
 CONTROL_PLANE_IP=""
 REAL_USER=""
 REAL_HOME=""
-
 NULL=/dev/null
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 # shellcheck source=/dev/null
-. /etc/os-release
 PAYLOAD_DIR="${PAYLOAD_DIR:-$SCRIPT_DIR/payload}"
 CONFIG_DIR="${CONFIG_DIR:-$SCRIPT_DIR/configs}"
+. /etc/os-release
 
 function main(){
     while [[ $# -gt 0 ]]; do
@@ -62,8 +56,8 @@ function main(){
 
     echo "install.sh — role: $ROLE"
     resolve_real_user
-    validate_environment
-    check_node
+    validate_environment || exit 1
+    check_node || exit 1
 }
 
 # Prints usage information
@@ -91,45 +85,45 @@ function resolve_real_user(){
 function validate_environment(){
     if [[ $EUID -ne 0 ]]; then
         echo "ERROR: Run this script as root (e.g. sudo bash install.sh ...)." >&2
-        exit 1
+        return 1
     fi
 
     if [[ "$ID" != "ubuntu" && "$ID" != "debian" ]] && \
        [[ "${ID_LIKE:-}" != *ubuntu* && "${ID_LIKE:-}" != *debian* ]]; then
         echo "ERROR: This installer targets Ubuntu 24.04. Detected OS: $ID" >&2
-        exit 1
+        return 1
     fi
 
     if command -v docker &>$NULL; then
         echo "ERROR: Docker is installed. Remove it before running this installer." >&2
-        exit 1
+        return 1
     fi
 
     if [[ "$ROLE" != "control_plane" && "$ROLE" != "worker" ]]; then
         echo "ERROR: --role must be 'control_plane' or 'worker'. Got: '${ROLE:-<unset>}'" >&2
-        exit 1
+        return 1
     fi
 
     if [[ "$ROLE" == "control_plane" && -z "$CONTROL_PLANE_IP" ]]; then
         echo "ERROR: --master <IP> is required when --role is control_plane." >&2
-        exit 1
+        return 1
     fi
 
     if [[ ! -d "$PAYLOAD_DIR" ]]; then
         echo "ERROR: Payload directory not found: $PAYLOAD_DIR" >&2
-        exit 1
+        return 1
     fi
 
     if [[ ! -d "$CONFIG_DIR" ]]; then
         echo "ERROR: Config directory not found: $CONFIG_DIR" >&2
-        exit 1
+        return 1
     fi
 }
 
 # Determines the current node state and routes to the appropriate action
 function check_node(){
     if ! command -v kubeadm &>$NULL || ! command -v kubelet &>$NULL; then
-        install_k8s "$ROLE"
+        install_k8s "$ROLE" || return 1
         return 0
     fi
 
@@ -142,18 +136,18 @@ function check_node(){
 
     if [[ "$is_control_plane" == "true" ]]; then
         if systemctl is-active --quiet kubelet; then
-            exit 0
+            return 0
         else
             echo "ERROR: Control-plane manifests present but kubelet is inactive.
 Manual investigation required.
 Run: journalctl -u kubelet --no-pager -n 50" >&2
-            exit 1
+            return 1
         fi
     else
         if systemctl is-active --quiet kubelet; then
-            exit 0
+            return 0
         else
-            recover_worker
+            recover_worker || return 1
         fi
     fi
 }
@@ -162,22 +156,22 @@ Run: journalctl -u kubelet --no-pager -n 50" >&2
 function install_k8s(){
     local role=$1
 
-    disable_swap
-    install_os_deps
-    install_containerd
-    install_cni
-    install_cri_tools
-    install_kube_binaries
-    configure_kernel
-    configure_iptables
-    import_images
+    disable_swap          || return 1
+    install_os_deps       || return 1
+    install_containerd    || return 1
+    install_cni           || return 1
+    install_cri_tools     || return 1
+    install_kube_binaries || return 1
+    configure_kernel      || return 1
+    configure_iptables    || return 1
+    import_images         || return 1
 
     if [[ "$role" == "control_plane" ]]; then
-        init_control_plane
-        install_calico
-        install_optional_tools
+        init_control_plane    || return 1
+        install_calico        || return 1
+        install_optional_tools || return 1
     else
-        join_worker_node
+        join_worker_node || return 1
     fi
 }
 
@@ -196,7 +190,7 @@ function recover_worker(){
 
     echo "ERROR: kubelet did not become active after restart.
 Run 'journalctl -u kubelet --no-pager -n 50' for details." >&2
-    exit 1
+    return 1
 }
 
 # Disables swap for the current boot and comments out swap entries in /etc/fstab
@@ -210,7 +204,7 @@ function disable_swap(){
 
     if [[ -n "$(swapon --noheadings --show)" ]]; then
         echo "ERROR: Failed to disable swap." >&2
-        exit 1
+        return 1
     fi
 }
 
@@ -251,7 +245,7 @@ function install_containerd(){
 
     echo "ERROR: containerd did not start within the expected time." >&2
     journalctl -u containerd --no-pager -n 30 >&2
-    exit 1
+    return 1
 }
 
 # Installs kubernetes-cni from payload/debs/tier-3
@@ -285,7 +279,7 @@ function install_kube_binaries(){
         fi
         echo "ERROR: Found kube binaries at v$installed_version, expected v$K8S_VERSION.
 Version changes are out of scope for this installer. Manual intervention required." >&2
-        exit 1
+        return 1
     fi
 
     require_debs "$PAYLOAD_DIR/debs/tier-5"
@@ -303,7 +297,7 @@ function require_debs(){
     count=$(find "$dir" -maxdepth 1 -name '*.deb' 2>$NULL | wc -l)
     if [[ $count -eq 0 ]]; then
         echo "ERROR: No .deb files found in $dir" >&2
-        exit 1
+        return 1
     fi
 }
 
@@ -354,7 +348,7 @@ function import_images(){
 
     if [[ $count -eq 0 ]]; then
         echo "ERROR: No image tarballs found in $image_dir" >&2
-        exit 1
+        return 1
     fi
 
     while IFS= read -r tar_file; do
@@ -366,7 +360,7 @@ function import_images(){
 function init_control_plane(){
     if [[ -f /etc/kubernetes/admin.conf ]]; then
         if [[ ! -s "$JOIN_COMMAND_PATH" ]]; then
-            wait_for_apiserver
+            wait_for_apiserver || return 1
             local join_cmd
             join_cmd="$(kubeadm token create --print-join-command)"
             echo "JOIN_COMMAND=\"$join_cmd\"" > "$JOIN_COMMAND_PATH"
@@ -388,7 +382,7 @@ function init_control_plane(){
     mkdir -p /root/.kube
     cp /etc/kubernetes/admin.conf /root/.kube/config
 
-    wait_for_apiserver
+    wait_for_apiserver || return 1
 
     local join_cmd
     join_cmd="$(kubeadm token create --print-join-command)"
@@ -404,7 +398,7 @@ function install_calico(){
     local calico_manifest="$PAYLOAD_DIR/manifests/calico.yaml"
     if [[ ! -f "$calico_manifest" ]]; then
         echo "ERROR: Calico manifest not found: $calico_manifest" >&2
-        exit 1
+        return 1
     fi
 
     kubectl --kubeconfig /etc/kubernetes/admin.conf \
@@ -436,7 +430,7 @@ function join_worker_node(){
 
     if [[ ! -f "$JOIN_COMMAND_PATH" ]]; then
         echo "ERROR: Join command file not found: $JOIN_COMMAND_PATH" >&2
-        exit 1
+        return 1
     fi
 
     # Sourced inside function: file is runtime-generated by init_control_plane
@@ -446,7 +440,7 @@ function join_worker_node(){
 
     if [[ -z "${JOIN_COMMAND:-}" ]]; then
         echo "ERROR: JOIN_COMMAND is empty in $JOIN_COMMAND_PATH" >&2
-        exit 1
+        return 1
     fi
 
     eval "$JOIN_COMMAND"
@@ -461,7 +455,7 @@ function wait_for_apiserver(){
         if [[ $(( SECONDS - start_time )) -ge $timeout ]]; then
             echo "ERROR: API server did not become healthy within ${timeout}s." >&2
             kubectl --kubeconfig /etc/kubernetes/admin.conf get --raw /healthz >&2 || true
-            exit 1
+            return 1
         fi
         sleep 2
     done

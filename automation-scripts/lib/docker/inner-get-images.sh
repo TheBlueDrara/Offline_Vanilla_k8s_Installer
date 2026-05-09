@@ -22,7 +22,7 @@ function main(){
             ;;
     esac
 
-    setup_repos
+    setup_repos || exit 1
     apt-get install -y --no-install-recommends "kubeadm=$K8S_VERSION-*" >$NULL 2>&1
     kubeadm config images list --kubernetes-version="v$K8S_VERSION"
 }

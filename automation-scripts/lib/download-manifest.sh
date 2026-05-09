@@ -33,7 +33,7 @@ function main(){
     fi
 
     echo "==> Downloading Calico v$CALICO_VERSION manifest..."
-    download_manifest "$dest"
+    download_manifest "$dest" || exit 1
     echo "    Saved: $dest"
 }
 

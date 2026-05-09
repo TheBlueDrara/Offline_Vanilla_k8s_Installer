@@ -9,15 +9,10 @@ set -o errexit
 set -o nounset
 set -o pipefail
 #################### End Safe Header ###########################
-
 K8S_VERSION="1.30.14"
 CALICO_VERSION="3.27.2"
 OUTPUT_DIR="./payload"
-
 NULL=/dev/null
-
-
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 function main(){
@@ -59,7 +54,7 @@ function main(){
   Output dir     : $OUTPUT_DIR
 "
 
-    validate_prerequisites
+    validate_prerequisites || exit 1
     setup_output_dirs
     echo "Output directory: $(realpath "$OUTPUT_DIR")"
 
@@ -102,18 +97,18 @@ Options:
 function validate_prerequisites(){
     if ! command -v docker &>$NULL; then
         echo "ERROR: docker not found on PATH." >&2
-        exit 1
+        return 1
     fi
 
     if ! docker info &>$NULL; then
         echo "ERROR: Docker daemon is not running, or current user lacks access.
        Add your user to the 'docker' group or run with sudo." >&2
-        exit 1
+        return 1
     fi
 
     if ! command -v curl &>$NULL; then
         echo "ERROR: curl not found on PATH." >&2
-        exit 1
+        return 1
     fi
 }
 

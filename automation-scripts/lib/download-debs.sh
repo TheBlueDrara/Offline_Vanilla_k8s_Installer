@@ -36,7 +36,7 @@ function main(){
     echo "==> Downloading .deb packages (ubuntu:24.04 container)
     k8s repo  : pkgs.k8s.io/core:/stable:/v${K8S_VERSION%.*}
     containerd: download.docker.com/linux/ubuntu"
-    download_debs
+    download_debs || exit 1
     echo "==> .deb download complete."
 }
 
