@@ -16,7 +16,7 @@ OUTPUT_DIR="./payload"
 
 NULL=/dev/null
 
-trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
+
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -37,6 +37,10 @@ function main(){
                 [[ $# -ge 2 ]] || { echo "ERROR: --output-dir requires a value." >&2; exit 1; }
                 OUTPUT_DIR="$2"
                 shift 2
+                ;;
+            --debug)
+                set -x
+                shift
                 ;;
             -h|--help)
                 help
@@ -89,6 +93,7 @@ Options:
   --k8s-version    <X.Y.Z>   k8s version      (default: 1.30.14)
   --calico-version <X.Y.Z>   Calico version   (default: 3.27.2)
   --output-dir     <PATH>    output directory  (default: ./payload)
+  --debug                    enable set -x tracing
   -h | --help                show this help"
 }
 

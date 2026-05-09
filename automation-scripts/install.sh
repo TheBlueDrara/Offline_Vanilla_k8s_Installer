@@ -25,7 +25,7 @@ REAL_HOME=""
 
 NULL=/dev/null
 
-trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
+
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PAYLOAD_DIR="${PAYLOAD_DIR:-$SCRIPT_DIR/payload}"

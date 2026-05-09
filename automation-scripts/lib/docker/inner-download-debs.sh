@@ -8,10 +8,14 @@ set -o nounset
 set -o pipefail
 #################### End Safe Header ###########################
 
-trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
+
 
 function main(){
     case "${1:-}" in
+        --debug)
+            set -x
+            shift
+            ;;
         -h|--help)
             help
             exit 0
@@ -39,6 +43,7 @@ function help(){
   Expects K8S_MINOR and K8S_VERSION in environment.
 
 Options:
+  --debug       enable set -x tracing
   -h | --help   show this help"
 }
 

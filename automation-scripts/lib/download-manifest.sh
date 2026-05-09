@@ -11,10 +11,14 @@ set -o pipefail
 # shellcheck disable=SC2034
 NULL=/dev/null
 
-trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
+
 
 function main(){
     case "${1:-}" in
+        --debug)
+            set -x
+            shift
+            ;;
         -h|--help)
             help
             exit 0
@@ -41,6 +45,7 @@ function help(){
   Called by prepare-assets.sh — not usually run directly.
 
 Options:
+  --debug       enable set -x tracing
   -h | --help   show this help"
 }
 
