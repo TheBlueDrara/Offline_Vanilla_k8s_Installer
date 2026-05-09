@@ -60,6 +60,7 @@ function main(){
         esac
     done
 
+    echo "install.sh — role: $ROLE"
     resolve_real_user
     validate_environment
     check_node
@@ -128,7 +129,6 @@ function validate_environment(){
 # Determines the current node state and routes to the appropriate action
 function check_node(){
     if ! command -v kubeadm &>$NULL || ! command -v kubelet &>$NULL; then
-        echo "k8s not installed — starting fresh installation (role: $ROLE)..."
         install_k8s "$ROLE"
         return 0
     fi
@@ -142,7 +142,6 @@ function check_node(){
 
     if [[ "$is_control_plane" == "true" ]]; then
         if systemctl is-active --quiet kubelet; then
-            echo "Control plane is already running — re-run is a no-op."
             exit 0
         else
             echo "ERROR: Control-plane manifests present but kubelet is inactive.
@@ -152,7 +151,6 @@ Run: journalctl -u kubelet --no-pager -n 50" >&2
         fi
     else
         if systemctl is-active --quiet kubelet; then
-            echo "Worker already joined and running — re-run is a no-op."
             exit 0
         else
             recover_worker
@@ -185,13 +183,11 @@ function install_k8s(){
 
 # Attempts to restart an inactive kubelet on a previously joined worker
 function recover_worker(){
-    echo "Worker kubelet is inactive — attempting restart..."
     systemctl start kubelet
 
     local retries=10
     while [[ $retries -gt 0 ]]; do
         if systemctl is-active --quiet kubelet; then
-            echo "kubelet restarted successfully."
             return 0
         fi
         retries=$(( retries - 1 ))
@@ -206,11 +202,9 @@ Run 'journalctl -u kubelet --no-pager -n 50' for details." >&2
 # Disables swap for the current boot and comments out swap entries in /etc/fstab
 function disable_swap(){
     if [[ -z "$(swapon --noheadings --show)" ]]; then
-        echo "Swap already disabled."
         return 0
     fi
 
-    echo "Disabling swap..."
     swapoff -a
     sed -i.bak '/[[:space:]]swap[[:space:]]/s/^/#/' /etc/fstab
 
@@ -223,11 +217,9 @@ function disable_swap(){
 # Installs OS-level prerequisites from payload/debs/tier-1
 function install_os_deps(){
     if dpkg -s conntrack &>$NULL && dpkg -s socat &>$NULL; then
-        echo "OS dependencies already installed."
         return 0
     fi
 
-    echo "Installing OS dependencies (tier-1)..."
     require_debs "$PAYLOAD_DIR/debs/tier-1"
     dpkg_install_tier "$PAYLOAD_DIR/debs/tier-1"
 }
@@ -235,9 +227,8 @@ function install_os_deps(){
 # Installs containerd from payload/debs/tier-2, writes config, and verifies service
 function install_containerd(){
     if command -v containerd &>$NULL && systemctl is-active --quiet containerd; then
-        echo "containerd already installed and active; refreshing config."
+        : # already installed; fall through to refresh config
     else
-        echo "Installing containerd (tier-2)..."
         require_debs "$PAYLOAD_DIR/debs/tier-2"
         dpkg_install_tier "$PAYLOAD_DIR/debs/tier-2"
     fi
@@ -252,7 +243,6 @@ function install_containerd(){
     local retries=10
     while [[ $retries -gt 0 ]]; do
         if systemctl is-active --quiet containerd; then
-            echo "containerd is active."
             return 0
         fi
         retries=$(( retries - 1 ))
@@ -267,11 +257,9 @@ function install_containerd(){
 # Installs kubernetes-cni from payload/debs/tier-3
 function install_cni(){
     if dpkg -s kubernetes-cni &>$NULL; then
-        echo "kubernetes-cni already installed."
         return 0
     fi
 
-    echo "Installing kubernetes-cni (tier-3)..."
     require_debs "$PAYLOAD_DIR/debs/tier-3"
     dpkg_install_tier "$PAYLOAD_DIR/debs/tier-3"
 }
@@ -279,11 +267,9 @@ function install_cni(){
 # Installs cri-tools (crictl) from payload/debs/tier-4
 function install_cri_tools(){
     if command -v crictl &>$NULL; then
-        echo "cri-tools already installed."
         return 0
     fi
 
-    echo "Installing cri-tools (tier-4)..."
     require_debs "$PAYLOAD_DIR/debs/tier-4"
     dpkg_install_tier "$PAYLOAD_DIR/debs/tier-4"
 }
@@ -295,7 +281,6 @@ function install_kube_binaries(){
 
     if [[ -n "$installed_version" ]]; then
         if [[ "$installed_version" == "$K8S_VERSION" ]]; then
-            echo "kube binaries already at v$K8S_VERSION."
             return 0
         fi
         echo "ERROR: Found kube binaries at v$installed_version, expected v$K8S_VERSION.
@@ -303,7 +288,6 @@ Version changes are out of scope for this installer. Manual intervention require
         exit 1
     fi
 
-    echo "Installing kube binaries (tier-5)..."
     require_debs "$PAYLOAD_DIR/debs/tier-5"
     dpkg_install_tier "$PAYLOAD_DIR/debs/tier-5"
 
@@ -347,18 +331,15 @@ function configure_iptables(){
     local legacy="/usr/sbin/iptables-legacy"
 
     if [[ ! -e "$legacy" ]]; then
-        echo "WARNING: iptables-legacy not found — leaving iptables backend unchanged."
         return 0
     fi
 
     local current
     current="$(readlink -f /etc/alternatives/iptables 2>$NULL || true)"
     if [[ "$current" == "$legacy" ]]; then
-        echo "iptables already in legacy mode."
         return 0
     fi
 
-    echo "Switching iptables to legacy mode..."
     update-alternatives --set iptables "$legacy"
     if [[ -e /usr/sbin/ip6tables-legacy ]]; then
         update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy
@@ -376,9 +357,7 @@ function import_images(){
         exit 1
     fi
 
-    echo "Importing $count container image(s) into k8s.io namespace..."
     while IFS= read -r tar_file; do
-        echo "  -> $(basename "$tar_file")"
         ctr -n k8s.io images import "$tar_file"
     done < <(find "$image_dir" -maxdepth 1 -name '*.tar' | sort)
 }
@@ -387,19 +366,14 @@ function import_images(){
 function init_control_plane(){
     if [[ -f /etc/kubernetes/admin.conf ]]; then
         if [[ ! -s "$JOIN_COMMAND_PATH" ]]; then
-            echo "Control plane already initialised but join command is missing — regenerating..."
             wait_for_apiserver
             local join_cmd
             join_cmd="$(kubeadm token create --print-join-command)"
             echo "JOIN_COMMAND=\"$join_cmd\"" > "$JOIN_COMMAND_PATH"
-            echo "Join command written to $JOIN_COMMAND_PATH"
-        else
-            echo "Control plane already initialised and join command exists."
         fi
         return 0
     fi
 
-    echo "Initialising control plane..."
     kubeadm init \
         --kubernetes-version="v$K8S_VERSION" \
         --control-plane-endpoint="$CONTROL_PLANE_IP" \
@@ -419,7 +393,6 @@ function init_control_plane(){
     local join_cmd
     join_cmd="$(kubeadm token create --print-join-command)"
     echo "JOIN_COMMAND=\"$join_cmd\"" > "$JOIN_COMMAND_PATH"
-    echo "Join command written to $JOIN_COMMAND_PATH"
 }
 
 # Deploys Calico CNI from payload/manifests/calico.yaml
@@ -434,7 +407,6 @@ function install_calico(){
         exit 1
     fi
 
-    echo "Deploying Calico (kubectl apply is idempotent)..."
     kubectl --kubeconfig /etc/kubernetes/admin.conf \
         apply --validate=false -f "$calico_manifest"
 }
@@ -445,13 +417,11 @@ function install_optional_tools(){
     [[ -d "$tools_dir" ]] || return 0
 
     if ! command -v helm &>$NULL && [[ -f "$tools_dir/helm_bin.tar.gz" ]]; then
-        echo "Installing helm..."
         tar -xzf "$tools_dir/helm_bin.tar.gz" -C "$tools_dir/"
         mv "$tools_dir/helm" /usr/local/bin/helm
     fi
 
     if ! command -v kustomize &>$NULL && [[ -f "$tools_dir/kustomize_bin.tar.gz" ]]; then
-        echo "Installing kustomize..."
         tar -xzf "$tools_dir/kustomize_bin.tar.gz" -C "$tools_dir/"
         mv "$tools_dir/kustomize" /usr/local/bin/kustomize
     fi
@@ -461,7 +431,6 @@ function install_optional_tools(){
 function join_worker_node(){
     if systemctl is-active --quiet kubelet && \
        [[ ! -f "$MANIFESTS_PATH/kube-apiserver.yaml" ]]; then
-        echo "Worker already joined and kubelet is active."
         return 0
     fi
 
@@ -480,7 +449,6 @@ function join_worker_node(){
         exit 1
     fi
 
-    echo "Joining cluster..."
     eval "$JOIN_COMMAND"
 }
 
@@ -489,7 +457,6 @@ function wait_for_apiserver(){
     local timeout=120
     local start_time=$SECONDS
 
-    echo "Waiting for API server to become healthy..."
     until kubectl --kubeconfig /etc/kubernetes/admin.conf get --raw /healthz &>$NULL; do
         if [[ $(( SECONDS - start_time )) -ge $timeout ]]; then
             echo "ERROR: API server did not become healthy within ${timeout}s." >&2
@@ -498,7 +465,6 @@ function wait_for_apiserver(){
         fi
         sleep 2
     done
-    echo "API server is healthy ($(( SECONDS - start_time ))s elapsed)."
 }
 
 main "$@"
