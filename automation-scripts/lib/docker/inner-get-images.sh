@@ -9,6 +9,12 @@ set -o pipefail
 
 trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
+main() {
+    setup_repos
+    apt-get install -y --no-install-recommends "kubeadm=${K8S_VERSION}-*" >/dev/null 2>&1
+    kubeadm config images list --kubernetes-version="v${K8S_VERSION}"
+}
+
 setup_repos() {
     export DEBIAN_FRONTEND=noninteractive
 
@@ -24,12 +30,6 @@ setup_repos() {
         "${K8S_MINOR}" > /etc/apt/sources.list.d/k8s.list
 
     apt-get update -qq >/dev/null 2>&1
-}
-
-main() {
-    setup_repos
-    apt-get install -y --no-install-recommends "kubeadm=${K8S_VERSION}-*" >/dev/null 2>&1
-    kubeadm config images list --kubernetes-version="v${K8S_VERSION}"
 }
 
 main "$@"

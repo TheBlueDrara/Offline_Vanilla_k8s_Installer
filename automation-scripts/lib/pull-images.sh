@@ -11,30 +11,7 @@ trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-image_to_filename() {
-    local image="$1"
-    local name
-
-    name="${image##*/}"
-    name="${name%%:*}"
-
-    if [[ "${image}" == *"/calico/"* ]]; then
-        name="calico-${name}"
-    fi
-
-    printf '%s' "${name}"
-}
-
-get_k8s_image_list() {
-    local k8s_minor
-    k8s_minor="${K8S_VERSION%.*}"
-
-    docker run --rm -i \
-        -e "K8S_MINOR=${k8s_minor}" \
-        -e "K8S_VERSION=${K8S_VERSION}" \
-        -v "${SCRIPT_DIR}/docker/inner-get-images.sh:/tmp/get_images.sh:ro" \
-        ubuntu:24.04 bash /tmp/get_images.sh
-}
+main() { pull_and_save_images; }
 
 pull_and_save_images() {
     echo "==> Querying kubeadm for k8s image list..."
@@ -79,5 +56,29 @@ pull_and_save_images() {
     echo "==> Images saved."
 }
 
-main() { pull_and_save_images; }
+get_k8s_image_list() {
+    local k8s_minor
+    k8s_minor="${K8S_VERSION%.*}"
+
+    docker run --rm -i \
+        -e "K8S_MINOR=${k8s_minor}" \
+        -e "K8S_VERSION=${K8S_VERSION}" \
+        -v "${SCRIPT_DIR}/docker/inner-get-images.sh:/tmp/get_images.sh:ro" \
+        ubuntu:24.04 bash /tmp/get_images.sh
+}
+
+image_to_filename() {
+    local image="$1"
+    local name
+
+    name="${image##*/}"
+    name="${name%%:*}"
+
+    if [[ "${image}" == *"/calico/"* ]]; then
+        name="calico-${name}"
+    fi
+
+    printf '%s' "${name}"
+}
+
 main "$@"

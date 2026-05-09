@@ -9,6 +9,20 @@ set -o pipefail
 
 trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
+main() {
+    setup_repos
+    cd /debs/tier-1 && apt-get download perl-base && cd /
+    download_tier 1 conntrack socat ebtables iptables
+    download_tier 2 containerd.io
+    download_tier 3 kubernetes-cni
+    download_tier 4 cri-tools
+    download_tier 5 \
+        "kubelet=${K8S_VERSION}-*" \
+        "kubeadm=${K8S_VERSION}-*" \
+        "kubectl=${K8S_VERSION}-*"
+    echo "--- All tiers downloaded."
+}
+
 setup_repos() {
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
@@ -39,20 +53,6 @@ download_tier() {
     apt-get install -y --download-only --no-install-recommends "$@"
     find /var/cache/apt/archives/ -maxdepth 1 -name '*.deb' \
         -exec mv {} "/debs/tier-${tier}/" \;
-}
-
-main() {
-    setup_repos
-    cd /debs/tier-1 && apt-get download perl-base && cd /
-    download_tier 1 conntrack socat ebtables iptables
-    download_tier 2 containerd.io
-    download_tier 3 kubernetes-cni
-    download_tier 4 cri-tools
-    download_tier 5 \
-        "kubelet=${K8S_VERSION}-*" \
-        "kubeadm=${K8S_VERSION}-*" \
-        "kubectl=${K8S_VERSION}-*"
-    echo "--- All tiers downloaded."
 }
 
 main "$@"

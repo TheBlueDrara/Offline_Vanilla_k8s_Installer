@@ -9,6 +9,8 @@ set -o pipefail
 
 trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
+main() { download_manifest; }
+
 download_manifest() {
     local dest="${OUTPUT_DIR}/manifests/calico.yaml"
 
@@ -24,5 +26,4 @@ download_manifest() {
     echo "    Saved: ${dest}"
 }
 
-main() { download_manifest; }
 main "$@"

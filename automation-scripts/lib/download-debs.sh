@@ -11,6 +11,8 @@ trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+main() { download_debs; }
+
 download_debs() {
     local k8s_minor
     k8s_minor="${K8S_VERSION%.*}"
@@ -39,5 +41,4 @@ download_debs() {
     echo "==> .deb download complete."
 }
 
-main() { download_debs; }
 main "$@"

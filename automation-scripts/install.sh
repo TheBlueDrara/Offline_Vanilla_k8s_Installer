@@ -36,30 +36,36 @@ REAL_HOME=""
 trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
 # ══════════════════════════════════════════════════════════════════════════
-# HELPERS
+# ENTRY POINT
 # ══════════════════════════════════════════════════════════════════════════
 
-# Asserts that a tier directory exists and contains at least one .deb file.
-# Pre:  $1 is the absolute path to a tier directory.
-# Post: exits 1 with a clear message if no .deb files are found.
-function require_debs() {
-    local dir="$1"
-    local count
-    count=$(find "${dir}" -maxdepth 1 -name '*.deb' 2>/dev/null | wc -l)
-    if [[ "${count}" -eq 0 ]]; then
-        echo "ERROR: No .deb files found in ${dir}" >&2
-        exit 1
-    fi
-}
+function main() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -r|--role)
+                [[ $# -ge 2 ]] || { echo "ERROR: --role requires a value." >&2; exit 1; }
+                ROLE="$2"
+                shift 2
+                ;;
+            -m|--master)
+                [[ $# -ge 2 ]] || { echo "ERROR: --master requires a value." >&2; exit 1; }
+                CONTROL_PLANE_IP="$2"
+                shift 2
+                ;;
+            --debug)
+                set -x
+                shift
+                ;;
+            *)
+                echo "WARNING: ignoring unrecognized argument: $1" >&2
+                shift
+                ;;
+        esac
+    done
 
-# Installs all .deb files in a tier directory via a single dpkg -i call.
-# Pre:  require_debs has confirmed the directory is non-empty.
-# Post: all packages in the directory are installed.
-function dpkg_install_tier() {
-    local dir="$1"
-    local -a debs
-    mapfile -t debs < <(find "${dir}" -maxdepth 1 -name '*.deb' | sort)
-    dpkg -i "${debs[@]}"
+    resolve_real_user
+    validate_environment
+    check_node
 }
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -120,6 +126,105 @@ function validate_environment() {
         echo "ERROR: Config directory not found: ${CONFIG_DIR}" >&2
         exit 1
     fi
+}
+
+# ══════════════════════════════════════════════════════════════════════════
+# ORCHESTRATION
+# ══════════════════════════════════════════════════════════════════════════
+
+# Determines the current node state and routes to the appropriate action.
+# This is the top-level decision function for all fresh-install and re-run paths.
+# Pre:  validate_environment() passed; ROLE is set.
+# Post: exits 0 for all success paths; exits 1 for unrecoverable states.
+function check_node() {
+    # ── Case 1: fresh node — either binary absent ──────────────────────────
+    if ! command -v kubeadm &>/dev/null || ! command -v kubelet &>/dev/null; then
+        echo "k8s not installed — starting fresh installation (role: ${ROLE})..."
+        install_k8s "${ROLE}"
+        return 0
+    fi
+
+    # ── Classify by presence of control-plane static pod manifests ─────────
+    local is_control_plane=false
+    if [[ -f "${MANIFESTS_PATH}/kube-apiserver.yaml" ]]          || \
+       [[ -f "${MANIFESTS_PATH}/kube-scheduler.yaml" ]]           || \
+       [[ -f "${MANIFESTS_PATH}/kube-controller-manager.yaml" ]]; then
+        is_control_plane=true
+    fi
+
+    if [[ "${is_control_plane}" == "true" ]]; then
+        # ── Case 2: control plane ──────────────────────────────────────────
+        if systemctl is-active --quiet kubelet; then
+            echo "Control plane is already running — re-run is a no-op."
+            exit 0
+        else
+            echo "ERROR: Control-plane manifests present but kubelet is inactive." >&2
+            echo "Manual investigation required." >&2
+            echo "Run: journalctl -u kubelet --no-pager -n 50" >&2
+            exit 1
+        fi
+    else
+        # ── Case 3: worker (no manifest files) ────────────────────────────
+        if systemctl is-active --quiet kubelet; then
+            echo "Worker already joined and running — re-run is a no-op."
+            exit 0
+        else
+            recover_worker
+        fi
+    fi
+}
+
+# Runs the full installation sequence for a fresh node (no k8s binaries present).
+# Called only from check_node() when neither kubeadm nor kubelet is on PATH.
+# Pre:  validate_environment() passed; ROLE is 'control_plane' or 'worker'.
+# Post: control plane initialised + Calico deployed, OR worker joined cluster.
+function install_k8s() {
+    local role="$1"
+
+    disable_swap
+    install_os_deps
+    install_containerd
+    install_cni
+    install_cri_tools
+    install_kube_binaries
+    configure_kernel
+    configure_iptables
+
+    # Images MUST be imported before any kubeadm operation.
+    # Workers need pause, kube-proxy, and Calico images in the k8s.io
+    # namespace before kubeadm join; control plane needs all init images.
+    import_images
+
+    if [[ "${role}" == "control_plane" ]]; then
+        init_control_plane
+        install_calico
+        install_optional_tools
+    else
+        join_worker_node
+    fi
+}
+
+# Attempts to restart an inactive kubelet on a worker that was previously
+# joined. Does NOT reinstall packages, re-import images, or rejoin the cluster.
+# Pre:  kubelet binary installed; node previously joined (no manifest files).
+# Post: kubelet is active; or exits 1 with diagnostic instructions.
+function recover_worker() {
+    echo "Worker kubelet is inactive — attempting restart..."
+    systemctl start kubelet
+
+    local retries=10
+    while [[ ${retries} -gt 0 ]]; do
+        if systemctl is-active --quiet kubelet; then
+            echo "kubelet restarted successfully."
+            return 0
+        fi
+        retries=$(( retries - 1 ))
+        sleep 2
+    done
+
+    echo "ERROR: kubelet did not become active after restart." >&2
+    echo "Run 'journalctl -u kubelet --no-pager -n 50' for details." >&2
+    exit 1
 }
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -378,28 +483,6 @@ function init_control_plane() {
     echo "Join command written to ${JOIN_COMMAND_PATH}"
 }
 
-# Polls the API server /healthz endpoint until it responds "ok".
-# Uses an explicit --kubeconfig to remove any dependency on /root/.kube/config
-# having been written before this function is called.
-# Replaces the former unexplained 'sleep 6' which provided no liveness guarantee.
-# Pre:  kubeadm init completed; /etc/kubernetes/admin.conf exists.
-# Post: API server confirmed healthy; or exits 1 after a 120 s timeout.
-function wait_for_apiserver() {
-    local timeout=120
-    local start_time=${SECONDS}
-
-    echo "Waiting for API server to become healthy..."
-    until kubectl --kubeconfig /etc/kubernetes/admin.conf get --raw /healthz &>/dev/null; do
-        if [[ $(( SECONDS - start_time )) -ge ${timeout} ]]; then
-            echo "ERROR: API server did not become healthy within ${timeout}s." >&2
-            kubectl --kubeconfig /etc/kubernetes/admin.conf get --raw /healthz >&2 || true
-            exit 1
-        fi
-        sleep 2
-    done
-    echo "API server is healthy ($(( SECONDS - start_time ))s elapsed)."
-}
-
 # Deploys Calico CNI from payload/manifests/calico.yaml and creates the
 # /opt/cni/bin → /usr/lib/cni symlink that Calico's binary CNI plugin needs.
 # kubectl apply is idempotent and self-healing, so there is no early-return
@@ -481,136 +564,53 @@ function join_worker_node() {
     eval "${JOIN_COMMAND}"
 }
 
-# Attempts to restart an inactive kubelet on a worker that was previously
-# joined. Does NOT reinstall packages, re-import images, or rejoin the cluster.
-# Pre:  kubelet binary installed; node previously joined (no manifest files).
-# Post: kubelet is active; or exits 1 with diagnostic instructions.
-function recover_worker() {
-    echo "Worker kubelet is inactive — attempting restart..."
-    systemctl start kubelet
-
-    local retries=10
-    while [[ ${retries} -gt 0 ]]; do
-        if systemctl is-active --quiet kubelet; then
-            echo "kubelet restarted successfully."
-            return 0
-        fi
-        retries=$(( retries - 1 ))
-        sleep 2
-    done
-
-    echo "ERROR: kubelet did not become active after restart." >&2
-    echo "Run 'journalctl -u kubelet --no-pager -n 50' for details." >&2
-    exit 1
-}
-
 # ══════════════════════════════════════════════════════════════════════════
-# ORCHESTRATION
+# HELPERS
 # ══════════════════════════════════════════════════════════════════════════
 
-# Runs the full installation sequence for a fresh node (no k8s binaries present).
-# Called only from check_node() when neither kubeadm nor kubelet is on PATH.
-# Pre:  validate_environment() passed; ROLE is 'control_plane' or 'worker'.
-# Post: control plane initialised + Calico deployed, OR worker joined cluster.
-function install_k8s() {
-    local role="$1"
-
-    disable_swap
-    install_os_deps
-    install_containerd
-    install_cni
-    install_cri_tools
-    install_kube_binaries
-    configure_kernel
-    configure_iptables
-
-    # Images MUST be imported before any kubeadm operation.
-    # Workers need pause, kube-proxy, and Calico images in the k8s.io
-    # namespace before kubeadm join; control plane needs all init images.
-    import_images
-
-    if [[ "${role}" == "control_plane" ]]; then
-        init_control_plane
-        install_calico
-        install_optional_tools
-    else
-        join_worker_node
+# Asserts that a tier directory exists and contains at least one .deb file.
+# Pre:  $1 is the absolute path to a tier directory.
+# Post: exits 1 with a clear message if no .deb files are found.
+function require_debs() {
+    local dir="$1"
+    local count
+    count=$(find "${dir}" -maxdepth 1 -name '*.deb' 2>/dev/null | wc -l)
+    if [[ "${count}" -eq 0 ]]; then
+        echo "ERROR: No .deb files found in ${dir}" >&2
+        exit 1
     fi
 }
 
-# Determines the current node state and routes to the appropriate action.
-# This is the top-level decision function for all fresh-install and re-run paths.
-# Pre:  validate_environment() passed; ROLE is set.
-# Post: exits 0 for all success paths; exits 1 for unrecoverable states.
-function check_node() {
-    # ── Case 1: fresh node — either binary absent ──────────────────────────
-    if ! command -v kubeadm &>/dev/null || ! command -v kubelet &>/dev/null; then
-        echo "k8s not installed — starting fresh installation (role: ${ROLE})..."
-        install_k8s "${ROLE}"
-        return 0
-    fi
+# Installs all .deb files in a tier directory via a single dpkg -i call.
+# Pre:  require_debs has confirmed the directory is non-empty.
+# Post: all packages in the directory are installed.
+function dpkg_install_tier() {
+    local dir="$1"
+    local -a debs
+    mapfile -t debs < <(find "${dir}" -maxdepth 1 -name '*.deb' | sort)
+    dpkg -i "${debs[@]}"
+}
 
-    # ── Classify by presence of control-plane static pod manifests ─────────
-    local is_control_plane=false
-    if [[ -f "${MANIFESTS_PATH}/kube-apiserver.yaml" ]]          || \
-       [[ -f "${MANIFESTS_PATH}/kube-scheduler.yaml" ]]           || \
-       [[ -f "${MANIFESTS_PATH}/kube-controller-manager.yaml" ]]; then
-        is_control_plane=true
-    fi
+# Polls the API server /healthz endpoint until it responds "ok".
+# Uses an explicit --kubeconfig to remove any dependency on /root/.kube/config
+# having been written before this function is called.
+# Replaces the former unexplained 'sleep 6' which provided no liveness guarantee.
+# Pre:  kubeadm init completed; /etc/kubernetes/admin.conf exists.
+# Post: API server confirmed healthy; or exits 1 after a 120 s timeout.
+function wait_for_apiserver() {
+    local timeout=120
+    local start_time=${SECONDS}
 
-    if [[ "${is_control_plane}" == "true" ]]; then
-        # ── Case 2: control plane ──────────────────────────────────────────
-        if systemctl is-active --quiet kubelet; then
-            echo "Control plane is already running — re-run is a no-op."
-            exit 0
-        else
-            echo "ERROR: Control-plane manifests present but kubelet is inactive." >&2
-            echo "Manual investigation required." >&2
-            echo "Run: journalctl -u kubelet --no-pager -n 50" >&2
+    echo "Waiting for API server to become healthy..."
+    until kubectl --kubeconfig /etc/kubernetes/admin.conf get --raw /healthz &>/dev/null; do
+        if [[ $(( SECONDS - start_time )) -ge ${timeout} ]]; then
+            echo "ERROR: API server did not become healthy within ${timeout}s." >&2
+            kubectl --kubeconfig /etc/kubernetes/admin.conf get --raw /healthz >&2 || true
             exit 1
         fi
-    else
-        # ── Case 3: worker (no manifest files) ────────────────────────────
-        if systemctl is-active --quiet kubelet; then
-            echo "Worker already joined and running — re-run is a no-op."
-            exit 0
-        else
-            recover_worker
-        fi
-    fi
-}
-
-# ══════════════════════════════════════════════════════════════════════════
-# ENTRY POINT
-# ══════════════════════════════════════════════════════════════════════════
-
-function main() {
-    while [[ $# -gt 0 ]]; do
-        case $1 in
-            -r|--role)
-                [[ $# -ge 2 ]] || { echo "ERROR: --role requires a value." >&2; exit 1; }
-                ROLE="$2"
-                shift 2
-                ;;
-            -m|--master)
-                [[ $# -ge 2 ]] || { echo "ERROR: --master requires a value." >&2; exit 1; }
-                CONTROL_PLANE_IP="$2"
-                shift 2
-                ;;
-            --debug)
-                set -x
-                shift
-                ;;
-            *)
-                echo "WARNING: ignoring unrecognized argument: $1" >&2
-                shift
-                ;;
-        esac
+        sleep 2
     done
-
-    resolve_real_user
-    validate_environment
-    check_node
+    echo "API server is healthy ($(( SECONDS - start_time ))s elapsed)."
 }
 
 main "$@"
