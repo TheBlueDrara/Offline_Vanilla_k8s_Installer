@@ -1,22 +1,23 @@
 #!/usr/bin/env bash
-###################################### START SAFE HEADER #########################################
+##################### Start Safe Header ########################
 # Developed by Alex Umansky aka TheBlueDrara
 # Purpose: Run inside ubuntu:24.04 container — installs kubeadm and prints
 #          the full image list for the target k8s version to stdout.
 set -o errexit
 set -o nounset
 set -o pipefail
-#################################### END SAFE HEADER #############################################
+#################### End Safe Header ###########################
 
 trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
-main() {
+function main(){
     setup_repos
     apt-get install -y --no-install-recommends "kubeadm=${K8S_VERSION}-*" >/dev/null 2>&1
-    kubeadm config images list --kubernetes-version="v${K8S_VERSION}"
+    kubeadm config images list --kubernetes-version="v$K8S_VERSION"
 }
 
-setup_repos() {
+# Configures the k8s apt repository inside the container
+function setup_repos(){
     export DEBIAN_FRONTEND=noninteractive
 
     apt-get update -qq >/dev/null 2>&1
@@ -28,7 +29,7 @@ setup_repos() {
         | gpg --dearmor -o /etc/apt/keyrings/k8s.gpg 2>/dev/null
 
     printf 'deb [signed-by=/etc/apt/keyrings/k8s.gpg] https://pkgs.k8s.io/core:/stable:/v%s/deb/ /\n' \
-        "${K8S_MINOR}" > /etc/apt/sources.list.d/k8s.list
+        "$K8S_MINOR" > /etc/apt/sources.list.d/k8s.list
 
     apt-get update -qq >/dev/null 2>&1
 }

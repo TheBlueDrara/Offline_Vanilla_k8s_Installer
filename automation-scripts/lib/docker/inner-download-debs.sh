@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-###################################### START SAFE HEADER #########################################
+##################### Start Safe Header ########################
 # Developed by Alex Umansky aka TheBlueDrara
 # Purpose: Run inside ubuntu:24.04 container — adds apt repos and downloads
 #          all .deb packages for tiers 1-5 into /debs/tier-{1..5}/.
 set -o errexit
 set -o nounset
 set -o pipefail
-#################################### END SAFE HEADER #############################################
+#################### End Safe Header ###########################
 
 trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
-main() {
+function main(){
     setup_repos
     cd /debs/tier-1 && apt-get download perl-base && cd /
     download_tier 1 conntrack socat ebtables iptables
@@ -24,7 +24,8 @@ main() {
     echo "--- All tiers downloaded."
 }
 
-setup_repos() {
+# Configures apt repositories for k8s and Docker inside the container
+function setup_repos(){
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
     apt-get install -y --no-install-recommends ca-certificates curl gpg
@@ -36,7 +37,7 @@ setup_repos() {
         | gpg --dearmor -o /etc/apt/keyrings/k8s.gpg
 
     printf 'deb [signed-by=/etc/apt/keyrings/k8s.gpg] https://pkgs.k8s.io/core:/stable:/v%s/deb/ /\n' \
-        "${K8S_MINOR}" > /etc/apt/sources.list.d/k8s.list
+        "$K8S_MINOR" > /etc/apt/sources.list.d/k8s.list
 
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
         | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
@@ -47,8 +48,9 @@ setup_repos() {
     apt-get update -qq
 }
 
-download_tier() {
-    local tier="$1"
+# Downloads packages for a single tier into /debs/tier-N
+function download_tier(){
+    local tier=$1
     shift
     echo "--- tier-${tier}: $*"
     apt-get install -y --download-only --no-install-recommends "$@"

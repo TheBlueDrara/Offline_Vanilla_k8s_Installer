@@ -1,42 +1,54 @@
 #!/usr/bin/env bash
-###################################### START SAFE HEADER #########################################
+##################### Start Safe Header ########################
 # Developed by Alex Umansky aka TheBlueDrara
 # Purpose: Download all .deb packages and container images needed by install.sh
 #          into a local payload/ directory ready for Ansible deployment.
+# Date 13.07.2025
+# Version 2.0.0
 set -o errexit
 set -o nounset
 set -o pipefail
-#################################### END SAFE HEADER #############################################
+#################### End Safe Header ###########################
 
 K8S_VERSION="1.30.14"
 CALICO_VERSION="3.27.2"
 OUTPUT_DIR="./payload"
 
+NULL=/dev/null
+
 trap 'echo "ERROR: command failed on line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-main() {
+function main(){
     while [[ $# -gt 0 ]]; do
         case $1 in
             --k8s-version)
                 [[ $# -ge 2 ]] || { echo "ERROR: --k8s-version requires a value." >&2; exit 1; }
-                K8S_VERSION="$2"; shift 2 ;;
+                K8S_VERSION="$2"
+                shift 2
+                ;;
             --calico-version)
                 [[ $# -ge 2 ]] || { echo "ERROR: --calico-version requires a value." >&2; exit 1; }
-                CALICO_VERSION="$2"; shift 2 ;;
+                CALICO_VERSION="$2"
+                shift 2
+                ;;
             --output-dir)
                 [[ $# -ge 2 ]] || { echo "ERROR: --output-dir requires a value." >&2; exit 1; }
-                OUTPUT_DIR="$2"; shift 2 ;;
+                OUTPUT_DIR="$2"
+                shift 2
+                ;;
             *)
-                echo "WARNING: ignoring unrecognized argument: $1" >&2; shift ;;
+                echo "WARNING: ignoring unrecognized argument: $1" >&2
+                shift
+                ;;
         esac
     done
 
     echo "prepare-assets.sh
-  k8s version    : ${K8S_VERSION}
-  Calico version : ${CALICO_VERSION}
-  Output dir     : ${OUTPUT_DIR}
+  k8s version    : $K8S_VERSION
+  Calico version : $CALICO_VERSION
+  Output dir     : $OUTPUT_DIR
 "
 
     validate_prerequisites
@@ -44,59 +56,61 @@ main() {
 
     export K8S_VERSION CALICO_VERSION OUTPUT_DIR
 
-    bash "${SCRIPT_DIR}/lib/download-debs.sh"
-    bash "${SCRIPT_DIR}/lib/pull-images.sh"
-    bash "${SCRIPT_DIR}/lib/download-manifest.sh"
+    bash "$SCRIPT_DIR/lib/download-debs.sh"
+    bash "$SCRIPT_DIR/lib/pull-images.sh"
+    bash "$SCRIPT_DIR/lib/download-manifest.sh"
 
     local tier img_count tier_counts=""
     for tier in 1 2 3 4 5; do
         local count
-        count=$(find "${OUTPUT_DIR}/debs/tier-${tier}" -maxdepth 1 -name '*.deb' | wc -l)
+        count=$(find "$OUTPUT_DIR/debs/tier-${tier}" -maxdepth 1 -name '*.deb' | wc -l)
         tier_counts="${tier_counts}      tier-${tier}: ${count} .deb(s)
 "
     done
-    img_count=$(find "${OUTPUT_DIR}/images" -maxdepth 1 -name '*.tar' | wc -l)
+    img_count=$(find "$OUTPUT_DIR/images" -maxdepth 1 -name '*.tar' | wc -l)
 
     echo "
 ==> payload/ is ready.
     Tier counts:
-${tier_counts}      images : ${img_count} .tar(s)
+${tier_counts}      images : $img_count .tar(s)
 
     Next: ansible-playbook cd/playbooks/main.yaml"
 }
 
-validate_prerequisites() {
-    if ! command -v docker &>/dev/null; then
+# Validates that docker and curl are available
+function validate_prerequisites(){
+    if ! command -v docker &>$NULL; then
         echo "ERROR: docker not found on PATH." >&2
         exit 1
     fi
 
-    if ! docker info &>/dev/null; then
+    if ! docker info &>$NULL; then
         echo "ERROR: Docker daemon is not running, or current user lacks access.
        Add your user to the 'docker' group or run with sudo." >&2
         exit 1
     fi
 
-    if ! command -v curl &>/dev/null; then
+    if ! command -v curl &>$NULL; then
         echo "ERROR: curl not found on PATH." >&2
         exit 1
     fi
 }
 
-setup_output_dirs() {
+# Creates all required output subdirectories
+function setup_output_dirs(){
     local -a dirs=(
-        "${OUTPUT_DIR}/debs/tier-1"
-        "${OUTPUT_DIR}/debs/tier-2"
-        "${OUTPUT_DIR}/debs/tier-3"
-        "${OUTPUT_DIR}/debs/tier-4"
-        "${OUTPUT_DIR}/debs/tier-5"
-        "${OUTPUT_DIR}/images"
-        "${OUTPUT_DIR}/manifests"
+        "$OUTPUT_DIR/debs/tier-1"
+        "$OUTPUT_DIR/debs/tier-2"
+        "$OUTPUT_DIR/debs/tier-3"
+        "$OUTPUT_DIR/debs/tier-4"
+        "$OUTPUT_DIR/debs/tier-5"
+        "$OUTPUT_DIR/images"
+        "$OUTPUT_DIR/manifests"
     )
     for dir in "${dirs[@]}"; do
-        mkdir -p "${dir}"
+        mkdir -p "$dir"
     done
-    echo "Output directory: $(realpath "${OUTPUT_DIR}")"
+    echo "Output directory: $(realpath "$OUTPUT_DIR")"
 }
 
 main "$@"
