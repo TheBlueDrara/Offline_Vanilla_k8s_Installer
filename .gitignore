@@ -6,3 +6,4 @@ payload/
 upload/
 .claude/
 configs/join_command.txt
+build-script/build-release-bundle.sh
