@@ -97,19 +97,20 @@ function get_k8s_image_list(){
         ubuntu:24.04 bash /tmp/get_images.sh
 }
 
-# Converts an image reference to a safe filename
+# Converts an image reference to a safe filename (tag included, colon replaced with dash)
 function image_to_filename(){
     local image=$1
-    local name
+    local base tag name
 
-    name="${image##*/}"
-    name="${name%%:*}"
+    base="${image##*/}"        # strip registry + path prefix, e.g. "kube-apiserver:v1.30.14"
+    name="${base%%:*}"         # component name before the colon
+    tag="${base#*:}"           # everything after the colon
 
     if [[ "$image" == *"/calico/"* ]]; then
         name="calico-${name}"
     fi
 
-    printf '%s' "$name"
+    printf '%s' "${name}-${tag}"
 }
 
 main "$@"
