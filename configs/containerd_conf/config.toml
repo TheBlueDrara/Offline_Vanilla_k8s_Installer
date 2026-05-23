@@ -6,7 +6,7 @@ required_plugins = []
 root = "/var/lib/containerd"
 state = "/run/containerd"
 temp = ""
-version = 2
+version = 3
 
 [cgroup]
   path = ""

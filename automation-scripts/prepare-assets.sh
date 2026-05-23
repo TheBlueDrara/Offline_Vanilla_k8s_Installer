@@ -11,7 +11,7 @@ set -o nounset
 set -o pipefail
 #################### End Safe Header ###########################
 K8S_VERSION="1.30.14"
-CALICO_VERSION="3.27.2"
+CALICO_VERSION="3.28.5"
 OUTPUT_DIR="./payload"
 GITHUB_REPO="TheBlueDrara/Offline_Vanilla_k8s_Installer"
 NULL=/dev/null
@@ -25,6 +25,7 @@ function validate_version(){
 
 # Silent prerequisite check — return 0 on success, 1 on failure
 function check_curl_installed(){ command -v curl &>"$NULL"; }
+function check_zstd_installed(){ command -v zstd &>"$NULL"; }
 
 # Creates all required output subdirectories
 function setup_output_dirs(){
@@ -41,15 +42,25 @@ function setup_output_dirs(){
     done
 }
 
-# Downloads a tar.gz from the release URL and extracts it into dest_dir
+# Downloads a tar.zst from the release URL to a tempfile, then extracts it into dest_dir
 function download_asset(){
     local url="$1" dest_dir="$2" strip="$3"
-    curl -fsSL "$url" | tar -xz -C "$dest_dir" --strip-components="$strip"
+    local tmp
+    tmp="$(mktemp /tmp/asset-XXXXXX.tar.zst)"
+    if ! curl -fSL --progress-bar "$url" -o "$tmp"; then
+        rm -f "$tmp"
+        return 1
+    fi
+    if ! tar --zstd -xf "$tmp" -C "$dest_dir" --strip-components="$strip"; then
+        rm -f "$tmp"
+        return 1
+    fi
+    rm -f "$tmp"
 }
 
 # Prints usage information
 function help(){
-    printf 'Usage: bash prepare-assets.sh [OPTIONS]\n\nOptions:\n  --k8s-version    <X.Y.Z>   k8s version      (default: 1.30.14)\n  --calico-version <X.Y.Z>   Calico version   (default: 3.27.2)\n  --output-dir     <PATH>    output directory  (default: ./payload)\n  --debug                    enable set -x tracing\n  -h | --help                show this help\n\nDownloads 3 pre-built tar.gz bundles (debs, images, manifests) from a GitHub\nRelease and extracts them into payload/. Requires only curl.\n'
+    printf 'Usage: bash prepare-assets.sh [OPTIONS]\n\nOptions:\n  --k8s-version    <X.Y.Z>   k8s version      (default: 1.30.14)\n  --calico-version <X.Y.Z>   Calico version   (default: 3.28.5)\n  --output-dir     <PATH>    output directory  (default: ./payload)\n  --debug                    enable set -x tracing\n  -h | --help                show this help\n\nDownloads 2 pre-built tar.zst bundles (debs, images) from a GitHub\nRelease and extracts them into payload/. Requires curl and zstd.\n'
 }
 
 function main(){
@@ -109,6 +120,11 @@ function main(){
         exit 1
     fi
 
+    if ! check_zstd_installed; then
+        printf 'ERROR: zstd not found on PATH. Install zstd and retry.\n' >&2
+        exit 1
+    fi
+
     if ! setup_output_dirs; then
         printf 'ERROR: failed to create output directories.\n' >&2
         exit 1
@@ -118,8 +134,8 @@ function main(){
     local release_base="https://github.com/${GITHUB_REPO}/releases/download/k8s-${K8S_VERSION}-calico-${CALICO_VERSION}"
 
     local -a filenames=(
-        "debs-k8s-v${K8S_VERSION}-calico-v${CALICO_VERSION}.tar.gz"
-        "images-k8s-v${K8S_VERSION}-calico-v${CALICO_VERSION}.tar.gz"
+        "debs-k8s-v${K8S_VERSION}-calico-v${CALICO_VERSION}.tar.zst"
+        "images-k8s-v${K8S_VERSION}-calico-v${CALICO_VERSION}.tar.zst"
     )
     local -a destinations=(
         "$OUTPUT_DIR/debs"

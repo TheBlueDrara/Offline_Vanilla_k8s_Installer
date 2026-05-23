@@ -89,7 +89,7 @@ function resolve_real_user(){
 }
 
 function is_root(){         [[ $EUID -eq 0 ]]; }
-function is_supported_os(){ [[ "$ID" == "ubuntu" || "$ID" == "debian" ]] || [[ "${ID_LIKE:-}" == *ubuntu* || "${ID_LIKE:-}" == *debian* ]]; }
+function is_supported_os(){ [[ "$ID" == "ubuntu" && "$VERSION_ID" == "24.04" ]]; }
 function no_docker(){       ! command -v docker &>$NULL; }
 function is_valid_role(){   [[ "$ROLE" == "control_plane" || "$ROLE" == "worker" ]]; }
 function is_master_set(){   [[ "$ROLE" != "control_plane" || -n "$CONTROL_PLANE_IP" ]]; }
@@ -111,14 +111,14 @@ function check_node(){
     fi
 
     if [[ "$is_control_plane" == "true" ]]; then
-        if systemctl is-active --quiet kubelet; then
-            return 0
-        else
-            echo "ERROR: Control-plane manifests present but kubelet is inactive.
-Manual investigation required.
-Run: journalctl -u kubelet --no-pager -n 50" >&2
+        if ! systemctl is-active --quiet kubelet; then
+            echo "ERROR: Control-plane manifests present but kubelet is inactive." >&2
             return 1
         fi
+        init_control_plane     || return 1
+        install_calico         || return 1
+        install_optional_tools || return 1
+        return 0
     else
         if systemctl is-active --quiet kubelet; then
             return 0
@@ -261,7 +261,7 @@ Version changes are out of scope for this installer. Manual intervention require
     require_debs "$PAYLOAD_DIR/debs/tier-5"     || return 1
     dpkg_install_tier "$PAYLOAD_DIR/debs/tier-5" || return 1
 
-    apt-mark hold kubelet kubeadm kubectl
+    apt-mark hold kubelet kubeadm kubectl containerd.io
     systemctl daemon-reload
     systemctl enable kubelet
 }

@@ -11,8 +11,10 @@ set -o pipefail
 
 
 function main() {
+    [[ -d ../payload && -n "$(ls -A ../payload 2>/dev/null)" ]] \
+        || { echo "ERROR: payload/ is empty — run prepare-assets.sh first." >&2; exit 1; }
 
-makeself ../ ../k8s_installer.run "K8s_Offline Installer" bash automation-scripts/install.sh
+    makeself ../ ../k8s_installer.run "K8s_Offline Installer" bash automation-scripts/install.sh
 }
 
 main
