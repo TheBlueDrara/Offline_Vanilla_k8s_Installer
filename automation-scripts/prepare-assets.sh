@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 ##################### Start Safe Header ########################
 # Developed by Alex Umansky aka TheBlueDrara
-# Purpose: Download all .deb packages and container images needed by install.sh
-#          into a local payload/ directory ready for Ansible deployment, By pulling them from GitHub Assets
+# Purpose: Download pre-built payload bundles from GitHub Releases into a local
+#          payload/ directory ready for Ansible deployment.
 # Start Date 13.07.2025
 # Modification Date 22.5.2026
-# Version 2.0.1
+# Version 3.0.0
 set -o errexit
 set -o nounset
 set -o pipefail
@@ -13,6 +13,7 @@ set -o pipefail
 K8S_VERSION="1.30.14"
 CALICO_VERSION="3.27.2"
 OUTPUT_DIR="./payload"
+GITHUB_REPO="TheBlueDrara/Offline_Vanilla_k8s_Installer"
 NULL=/dev/null
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -20,6 +21,36 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 function validate_version(){
     local value="$1"
     [[ "$value" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+}
+
+# Silent prerequisite check — return 0 on success, 1 on failure
+function check_curl_installed(){ command -v curl &>"$NULL"; }
+
+# Creates all required output subdirectories
+function setup_output_dirs(){
+    local -a dirs=(
+        "$OUTPUT_DIR/debs/tier-1"
+        "$OUTPUT_DIR/debs/tier-2"
+        "$OUTPUT_DIR/debs/tier-3"
+        "$OUTPUT_DIR/debs/tier-4"
+        "$OUTPUT_DIR/debs/tier-5"
+        "$OUTPUT_DIR/images"
+        "$OUTPUT_DIR/manifests"
+    )
+    for dir in "${dirs[@]}"; do
+        mkdir -p "$dir"
+    done
+}
+
+# Downloads a tar.gz from the release URL and extracts it into dest_dir
+function download_asset(){
+    local url="$1" dest_dir="$2" strip="$3"
+    curl -fsSL "$url" | tar -xz -C "$dest_dir" --strip-components="$strip"
+}
+
+# Prints usage information
+function help(){
+    printf 'Usage: bash prepare-assets.sh [OPTIONS]\n\nOptions:\n  --k8s-version    <X.Y.Z>   k8s version      (default: 1.30.14)\n  --calico-version <X.Y.Z>   Calico version   (default: 3.27.2)\n  --output-dir     <PATH>    output directory  (default: ./payload)\n  --debug                    enable set -x tracing\n  -h | --help                show this help\n\nDownloads 3 pre-built tar.gz bundles (debs, images, manifests) from a GitHub\nRelease and extracts them into payload/. Requires only curl.\n'
 }
 
 function main(){
@@ -74,17 +105,6 @@ function main(){
     printf 'prepare-assets.sh\n  k8s version    : %s\n  Calico version : %s\n  Output dir     : %s\n\n' \
         "$K8S_VERSION" "$CALICO_VERSION" "$OUTPUT_DIR"
 
-    if ! check_docker_installed; then
-        printf 'ERROR: docker not found on PATH.\n' >&2
-        exit 1
-    fi
-
-    if ! check_docker_running; then
-        printf 'ERROR: Docker daemon is not running, or current user lacks access.\n' >&2
-        printf '       Add your user to the '\''docker'\'' group or run with sudo.\n' >&2
-        exit 1
-    fi
-
     if ! check_curl_installed; then
         printf 'ERROR: curl not found on PATH.\n' >&2
         exit 1
@@ -96,19 +116,30 @@ function main(){
     fi
     printf 'Output directory: %s\n' "$(realpath "$OUTPUT_DIR")"
 
-    export K8S_VERSION CALICO_VERSION OUTPUT_DIR
+    local release_base="https://github.com/${GITHUB_REPO}/releases/download/k8s-${K8S_VERSION}-calico-${CALICO_VERSION}"
 
-    if ! bash "$SCRIPT_DIR/lib/download-debs.sh"; then
-        exit 1
-    fi
+    local -a filenames=(
+        "debs-k8s-v${K8S_VERSION}-calico-v${CALICO_VERSION}.tar.gz"
+        "images-k8s-v${K8S_VERSION}-calico-v${CALICO_VERSION}.tar.gz"
+        "manifests-k8s-v${K8S_VERSION}-calico-v${CALICO_VERSION}.tar.gz"
+    )
+    local -a destinations=(
+        "$OUTPUT_DIR/debs"
+        "$OUTPUT_DIR/images"
+        "$OUTPUT_DIR/manifests"
+    )
 
-    if ! bash "$SCRIPT_DIR/lib/pull-images.sh"; then
-        exit 1
-    fi
-
-    if ! bash "$SCRIPT_DIR/lib/download-manifest.sh"; then
-        exit 1
-    fi
+    local i
+    for i in 0 1 2; do
+        local filename="${filenames[$i]}"
+        local dest="${destinations[$i]}"
+        printf 'Downloading %s...\n' "$filename"
+        if ! download_asset "${release_base}/${filename}" "$dest" 2; then
+            printf 'ERROR: failed to download %s.\n' "$filename" >&2
+            exit 1
+        fi
+        printf '    done.\n'
+    done
 
     local tier img_count tier_counts=""
     for tier in 1 2 3 4 5; do
@@ -121,32 +152,6 @@ function main(){
 
     printf '\n==> payload/ is ready.\n    Tier counts:\n%s      images : %s .tar(s)\n\n    Next: ansible-playbook cd/playbooks/main.yaml\n' \
         "$tier_counts" "$img_count"
-}
-
-# Prints usage information
-function help(){
-    printf 'Usage: bash prepare-assets.sh [OPTIONS]\n\nOptions:\n  --k8s-version    <X.Y.Z>   k8s version      (default: 1.30.14)\n  --calico-version <X.Y.Z>   Calico version   (default: 3.27.2)\n  --output-dir     <PATH>    output directory  (default: ./payload)\n  --debug                    enable set -x tracing\n  -h | --help                show this help\n'
-}
-
-# Silent prerequisite checks — return 0 on success, 1 on failure
-function check_docker_installed(){ command -v docker &>"$NULL"; }
-function check_docker_running(){   docker info    &>"$NULL"; }
-function check_curl_installed(){   command -v curl &>"$NULL"; }
-
-# Creates all required output subdirectories
-function setup_output_dirs(){
-    local -a dirs=(
-        "$OUTPUT_DIR/debs/tier-1"
-        "$OUTPUT_DIR/debs/tier-2"
-        "$OUTPUT_DIR/debs/tier-3"
-        "$OUTPUT_DIR/debs/tier-4"
-        "$OUTPUT_DIR/debs/tier-5"
-        "$OUTPUT_DIR/images"
-        "$OUTPUT_DIR/manifests"
-    )
-    for dir in "${dirs[@]}"; do
-        mkdir -p "$dir"
-    done
 }
 
 main "$@"
