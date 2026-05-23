@@ -380,13 +380,13 @@ function wait_for_apiserver(){
     done
 }
 
-# Deploys Calico CNI from payload/manifests/calico.yaml
+# Deploys Calico CNI from configs/calico_conf/calico.yaml
 function install_calico(){
     if [[ ! -e /usr/lib/cni ]]; then
         ln -s /opt/cni/bin /usr/lib/cni
     fi
 
-    local calico_manifest="$PAYLOAD_DIR/manifests/calico.yaml"
+    local calico_manifest="$CONFIG_DIR/calico_conf/calico.yaml"
     if [[ ! -f "$calico_manifest" ]]; then
         echo "ERROR: Calico manifest not found: $calico_manifest" >&2
         return 1

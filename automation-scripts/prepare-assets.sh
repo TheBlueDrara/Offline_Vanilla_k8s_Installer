@@ -35,7 +35,6 @@ function setup_output_dirs(){
         "$OUTPUT_DIR/debs/tier-4"
         "$OUTPUT_DIR/debs/tier-5"
         "$OUTPUT_DIR/images"
-        "$OUTPUT_DIR/manifests"
     )
     for dir in "${dirs[@]}"; do
         mkdir -p "$dir"
@@ -121,16 +120,14 @@ function main(){
     local -a filenames=(
         "debs-k8s-v${K8S_VERSION}-calico-v${CALICO_VERSION}.tar.gz"
         "images-k8s-v${K8S_VERSION}-calico-v${CALICO_VERSION}.tar.gz"
-        "manifests-k8s-v${K8S_VERSION}-calico-v${CALICO_VERSION}.tar.gz"
     )
     local -a destinations=(
         "$OUTPUT_DIR/debs"
         "$OUTPUT_DIR/images"
-        "$OUTPUT_DIR/manifests"
     )
 
     local i
-    for i in 0 1 2; do
+    for i in 0 1; do
         local filename="${filenames[$i]}"
         local dest="${destinations[$i]}"
         printf 'Downloading %s...\n' "$filename"
@@ -150,7 +147,7 @@ function main(){
     done
     img_count=$(find "$OUTPUT_DIR/images" -maxdepth 1 -name '*.tar' | wc -l)
 
-    printf '\n==> payload/ is ready.\n    Tier counts:\n%s      images : %s .tar(s)\n\n    Next: ansible-playbook cd/playbooks/main.yaml\n' \
+    printf '\n==> payload/ is ready.\n    Tier counts:\n%s      images  : %s .tar(s)\n\n    Next: ansible-playbook cd/playbooks/main.yaml\n' \
         "$tier_counts" "$img_count"
 }
 
